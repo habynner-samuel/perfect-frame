@@ -1,10 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Anton, Inter, Pinyon_Script } from "next/font/google";
+import { Barlow, Barlow_Condensed } from "next/font/google";
 import "./globals.css";
 
-const anton = Anton({ subsets: ["latin"], weight: "400", variable: "--font-anton", display: "swap" });
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
-const script = Pinyon_Script({ subsets: ["latin"], weight: "400", variable: "--font-script", display: "swap" });
+const condensed = Barlow_Condensed({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  variable: "--font-barlow-condensed",
+  display: "swap",
+});
+const barlow = Barlow({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-barlow", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Frame do Pregador",
@@ -13,11 +17,11 @@ export const metadata: Metadata = {
   icons: { icon: "/icon.svg" },
 };
 
-export const viewport: Viewport = { themeColor: "#0d0805" };
+export const viewport: Viewport = { themeColor: "#020a18" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${anton.variable} ${inter.variable} ${script.variable}`}>
+    <html lang="pt-BR" className={`${condensed.variable} ${barlow.variable}`}>
       <body>{children}</body>
     </html>
   );

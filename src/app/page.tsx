@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import JSZip from "jszip";
 import { Home } from "@/components/Home";
 import { Results } from "@/components/Results";
-import { Button, Card, Icon, Logo } from "@/components/ui";
+import { Button, Icon, Wordmark } from "@/components/ui";
 import { getAnalyzer } from "@/lib/analyzer-client";
 import { groupPeople } from "@/lib/people";
 import {
@@ -287,68 +287,70 @@ export default function Page() {
   const durMin = srcRef.current ? srcRef.current.duration / 60 : 0;
 
   return (
-    <div className="relative min-h-screen overflow-x-clip">
-      {/* luz quente ao fundo */}
-      <div className="flare -left-40 top-[-120px] h-[520px] w-[260px] bg-orange/70" />
-      <div className="flare right-[-200px] top-[30%] h-[420px] w-[420px] bg-ember/40" />
-
-      <header className="sticky top-0 z-30 px-4 pt-4 sm:px-8">
-        <nav className="mx-auto flex max-w-[1240px] items-center justify-between rounded-full border border-line bg-bg/70 py-2.5 pl-5 pr-2.5 backdrop-blur-xl">
-          <button onClick={reset} className="cursor-pointer" aria-label="Voltar ao início">
-            <Logo />
-          </button>
-          <div className="flex items-center gap-1.5">
-            <a href="#como-funciona" onClick={() => phase !== "inicio" && reset()} className="hidden rounded-full px-4 py-2 text-sm text-muted transition hover:text-cream sm:block">
+    <div className="min-h-screen overflow-x-clip">
+      {/* Barra de navegacao reta de ponta a ponta, como a da Apple; marca no centro */}
+      <header className="sticky top-0 z-30 border-b border-line bg-abyss/90 backdrop-blur-md">
+        <nav className="mx-auto grid h-12 max-w-[1180px] grid-cols-[1fr_auto_1fr] items-center px-4 sm:px-6">
+          <div className="flex items-center gap-6">
+            <a
+              href="#como-funciona"
+              onClick={() => phase !== "inicio" && reset()}
+              className="eyebrow hidden text-[12px] text-mist transition-colors hover:text-white sm:block"
+            >
               Como funciona
             </a>
-            <span className="hidden items-center gap-1.5 rounded-full bg-surface-2 px-4 py-2 text-sm text-muted md:flex">
-              <Icon name="lock" className="h-3.5 w-3.5 text-amber" /> 100% no navegador
-            </span>
+          </div>
+          <button onClick={reset} className="cursor-pointer" aria-label="Voltar ao início">
+            <Wordmark />
+          </button>
+          <div className="flex justify-end">
+            <span className="eyebrow hidden text-[12px] text-mist md:block">100% no navegador</span>
           </div>
         </nav>
       </header>
 
-      <main className="relative">
+      <main>
         {phase === "inicio" && (
           <Home settings={settings} onSettings={setSettings} onFile={onFile} notice={notice} />
         )}
 
-        {/* VARREDURA (o video fica sempre montado aqui para nao perder o arquivo) */}
-        <section className={phase === "varredura" ? "mx-auto max-w-[1240px] px-4 pb-24 pt-10 sm:px-8" : "hidden"}>
-          <div className="grid items-center gap-6 lg:grid-cols-[1.2fr_1fr]">
-            <Card className="grain overflow-hidden p-3">
-              <div className="grid aspect-video w-full place-items-center overflow-hidden rounded-[22px] bg-black">
-                <canvas ref={previewRef} className="max-h-full max-w-full" aria-label="Frame sendo analisado" />
-              </div>
-            </Card>
-            <div className="flex flex-col justify-center">
-              <p className="text-sm font-semibold uppercase tracking-[0.36em] text-muted">Analisando</p>
-              <h1 className="mt-2 font-display text-[clamp(56px,7vw,96px)] uppercase leading-[0.88]">
-                <span className="text-gradient">{Math.floor(pct)}%</span>
-              </h1>
-              <p className="mt-3 truncate text-muted">{fileName}</p>
+        {/* VARREDURA */}
+        <section className={phase === "varredura" ? "depth px-4 pb-24 pt-10 sm:px-6" : "hidden"}>
+          <div className="mx-auto max-w-[980px] text-center">
+            <p className="eyebrow text-mist">Analisando o vídeo</p>
+            <h1 className="mt-3 font-display text-[clamp(80px,10vw,128px)] font-extrabold leading-[0.85]">
+              {Math.floor(pct)}%
+            </h1>
+            <p className="mt-3 truncate text-mist">{fileName}</p>
+          </div>
 
-              <div className="mt-8 h-3 overflow-hidden rounded-full bg-surface-3">
-                <div className="bg-ember-gradient relative h-full rounded-full transition-[width] duration-300" style={{ width: `${Math.max(2, pct)}%` }}>
-                  <div className="shimmer absolute inset-0 rounded-full" />
-                </div>
-              </div>
-              <p className="mt-3 text-sm text-gold" aria-live="polite">{status}</p>
+          <div className="mx-auto mt-8 max-w-[760px]">
+            <div className="grid aspect-video w-full place-items-center overflow-hidden rounded-[4px] bg-abyss">
+              <canvas ref={previewRef} className="max-h-full max-w-full" aria-label="Frame sendo analisado" />
+            </div>
+            <div className="mt-6 h-1 bg-line-strong">
+              <div className="h-full bg-cyan transition-[width] duration-300" style={{ width: `${Math.max(1, pct)}%` }} />
+            </div>
+            <p className="mt-3 text-[15px] text-cyan" aria-live="polite">{status}</p>
 
-              <div className="mt-8 grid grid-cols-3 gap-3">
-                <Stat label="Minutos analisados" value={`${Math.floor((progress?.videoSeconds ?? 0) / 60)}`} sub={`de ${Math.ceil(durMin)} min`} />
-                <Stat label="Tempo restante" value={progress?.etaSeconds != null ? etaLabel(progress.etaSeconds).replace("cerca de ", "") : "..."} sub="estimado" />
-                <Stat label="Rostos" value={`${progress?.facesFound ?? 0}`} sub="encontrados" />
-              </div>
+            <div className="mt-10 grid grid-cols-3 border-y border-line">
+              <Stat label="Minutos analisados" value={`${Math.floor((progress?.videoSeconds ?? 0) / 60)}`} sub={`de ${Math.ceil(durMin)} min`} />
+              <Stat
+                label="Tempo restante"
+                value={progress?.etaSeconds != null ? etaLabel(progress.etaSeconds).replace("cerca de ", "") : "..."}
+                sub="estimado"
+                divider
+              />
+              <Stat label="Rostos" value={`${progress?.facesFound ?? 0}`} sub="encontrados" divider />
+            </div>
 
-              <div className="mt-8 flex flex-wrap items-center gap-4">
-                <Button variant="ghost" onClick={cancelScan}>
-                  <Icon name="close" /> Cancelar
-                </Button>
-                <span className="text-xs text-faint">
-                  O progresso é salvo sozinho. {engine && `Processando com ${engine.landmarker === "GPU" ? "placa de vídeo" : "processador"}.`}
-                </span>
-              </div>
+            <div className="mt-10 flex flex-col items-center gap-4">
+              <Button variant="outline" onClick={cancelScan}>
+                <Icon name="close" /> Cancelar
+              </Button>
+              <span className="text-[14px] text-faint">
+                O progresso é salvo sozinho. {engine && `Processando com ${engine.landmarker === "GPU" ? "placa de vídeo" : "processador"}.`}
+              </span>
             </div>
           </div>
         </section>
@@ -356,8 +358,8 @@ export default function Page() {
         {phase === "resultado" && (
           <>
             {notice && (
-              <div className="mx-auto mt-6 max-w-[1240px] px-4 sm:px-8">
-                <div role="alert" className="rounded-2xl border border-danger/40 bg-danger/10 px-5 py-4 text-sm text-[#ffd2c4]">{notice.text}</div>
+              <div className="mx-auto mt-6 max-w-[1180px] px-4 sm:px-6">
+                <div role="alert" className="border-l-2 border-danger bg-danger/10 px-5 py-4 text-[15px]">{notice.text}</div>
               </div>
             )}
             <Results
@@ -381,39 +383,38 @@ export default function Page() {
           o quadro anterior logo depois de um seek. */}
       <video ref={videoRef} className="hidden" muted playsInline aria-hidden />
 
-      <footer className="relative border-t border-line px-4 py-10 text-center text-sm text-faint sm:px-8">
-        Frame do Pregador. Tudo roda no seu navegador: o vídeo não é enviado para lugar nenhum.
+      <footer className="border-t border-line bg-abyss px-4 py-12 text-center sm:px-6">
+        <Wordmark className="text-[17px]" />
+        <p className="mt-3 text-[14px] text-faint">Tudo roda no seu navegador. O vídeo não é enviado para lugar nenhum.</p>
       </footer>
 
       {/* RETOMAR */}
       {resume && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="retomar-titulo">
-          <Card className="rise w-full max-w-[480px] p-8">
-            <span className="bg-ember-gradient grid h-12 w-12 place-items-center rounded-full text-[#1f0f05]">
-              <Icon name="spark" className="h-6 w-6" />
-            </span>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-abyss/85 p-4" role="dialog" aria-modal="true" aria-labelledby="retomar-titulo">
+          <div className="rise w-full max-w-[520px] rounded-[4px] border border-line-strong bg-panel p-8 sm:p-10">
+            <p className="eyebrow text-cyan">{resume.saved.done ? "Vídeo conhecido" : "Análise pela metade"}</p>
             {resume.saved.done ? (
               <>
-                <h2 id="retomar-titulo" className="mt-5 font-display text-4xl uppercase leading-none">Já analisado</h2>
-                <p className="mt-3 leading-relaxed text-muted">
-                  Esse vídeo já foi analisado antes neste computador. Quer usar o resultado salvo ou analisar de novo?
+                <h2 id="retomar-titulo" className="mt-3 font-display text-[44px] font-extrabold uppercase leading-none">Já analisado</h2>
+                <p className="mt-4 text-mist">
+                  Esse vídeo já foi analisado neste computador. Quer usar o resultado salvo ou analisar de novo?
                 </p>
               </>
             ) : (
               <>
-                <h2 id="retomar-titulo" className="mt-5 font-display text-4xl uppercase leading-none">Continuar?</h2>
-                <p className="mt-3 leading-relaxed text-muted">
+                <h2 id="retomar-titulo" className="mt-3 font-display text-[44px] font-extrabold uppercase leading-none">Continuar?</h2>
+                <p className="mt-4 text-mist">
                   Você já começou a analisar esse vídeo ({Math.floor((resume.saved.nextIndex / resume.saved.totalFrames) * 100)}% feito).
                   Quer continuar de onde parou?
                 </p>
               </>
             )}
-            <div className="mt-7 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap gap-3">
               <Button onClick={() => startScan(resume.file, resume.saved)}>
-                {resume.saved.done ? "Usar resultado salvo" : "Continuar de onde parou"}
+                {resume.saved.done ? "Usar resultado salvo" : "Continuar"}
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
                 onClick={async () => {
                   const f = resume.file;
                   await deleteScan(resume.saved.key);
@@ -423,22 +424,22 @@ export default function Page() {
                 Começar do zero
               </Button>
             </div>
-            <button onClick={() => setResume(null)} className="mt-5 cursor-pointer text-sm text-faint hover:text-cream">
+            <button onClick={() => setResume(null)} className="mt-6 cursor-pointer text-[15px] text-cyan hover:underline underline-offset-4">
               Voltar
             </button>
-          </Card>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
+function Stat({ label, value, sub, divider = false }: { label: string; value: string; sub: string; divider?: boolean }) {
   return (
-    <div className="rounded-[22px] border border-line bg-surface p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-faint">{label}</p>
-      <p className="mt-2 font-display text-[28px] leading-none text-cream">{value}</p>
-      <p className="mt-1 text-xs text-muted">{sub}</p>
+    <div className={`px-3 py-6 text-center sm:px-6 ${divider ? "border-l border-line" : ""}`}>
+      <p className="eyebrow text-[11px] text-mist">{label}</p>
+      <p className="mt-3 font-display text-[clamp(30px,4vw,44px)] font-bold leading-none">{value}</p>
+      <p className="mt-1 text-[14px] text-faint">{sub}</p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import type { ScanSettings } from "@/lib/types";
-import { Card, Icon, Pill } from "./ui";
+import { Button, Icon, Panel, TextLink } from "./ui";
 
 const INTERVALS = [0.5, 1, 2, 3];
 
@@ -23,148 +23,155 @@ export function Home({
     const f = files?.[0];
     if (f) onFile(f);
   };
+  const open = () => input.current?.click();
 
   return (
     <>
-      {/* HERO */}
-      <section className="relative mx-auto grid max-w-[1240px] gap-10 px-4 pb-16 pt-10 sm:px-8 lg:grid-cols-[1.05fr_1fr] lg:gap-14 lg:pt-16">
-        <div className="rise flex flex-col justify-center">
-          <Pill className="w-fit">
-            <Icon name="lock" className="h-3.5 w-3.5 text-amber" />
-            O vídeo não sai do seu computador
-          </Pill>
-          <p className="mt-8 text-sm font-semibold uppercase tracking-[0.42em] text-muted">Frame do</p>
-          <h1 className="font-display text-[clamp(72px,11vw,156px)] uppercase leading-[0.86] tracking-[-0.01em]">
-            <span className="text-gradient">Pregador</span>
+      {/* HERO: titulo centralizado, como a Apple */}
+      <section className="depth px-4 pb-24 pt-20 text-center sm:px-6 sm:pt-28">
+        <div className="rise mx-auto max-w-[980px]">
+          <p className="eyebrow text-mist">Fotos de pregação, direto do vídeo</p>
+          <h1 className="mt-5 font-display font-extrabold uppercase leading-[0.86] tracking-[-0.005em]">
+            <span className="block text-[clamp(34px,5vw,60px)] font-semibold tracking-[0.18em] text-mist">Frame do</span>
+            <span className="block text-[clamp(84px,15vw,196px)]">Pregador</span>
           </h1>
-          <p className="mt-1 font-script text-[clamp(34px,4.2vw,54px)] leading-none text-gold">a melhor pose, sem esforço</p>
-          <p className="mt-8 max-w-[520px] text-lg leading-relaxed text-muted">
-            Escolha o vídeo da pregação. O site encontra o pregador e entrega os frames com a melhor pose,
-            prontos para usar na arte de divulgação.
+          <p className="mx-auto mt-6 max-w-[620px] text-[19px] leading-[1.5] text-mist sm:text-[21px]">
+            Escolha o vídeo do culto. O site encontra o pregador e entrega os frames com a melhor pose,
+            prontos para a arte de divulgação.
           </p>
-          <div className="mt-8 flex flex-wrap gap-2 text-sm text-muted">
-            <Pill>Frame inteiro em PNG</Pill>
-            <Pill>Recorte vertical 4:5</Pill>
-            <Pill>Baixar tudo em .zip</Pill>
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-x-6 gap-y-4">
+            <Button onClick={open}>
+              <Icon name="upload" /> Escolher vídeo
+            </Button>
+            <TextLink href="#como-funciona">Como funciona</TextLink>
           </div>
         </div>
 
-        {/* DROPZONE */}
-        <div className="rise [animation-delay:120ms]">
-          <Card className="grain overflow-hidden p-3">
-            <div className="flare -left-24 top-10 h-72 w-40 bg-orange" />
-            <div className="flare -right-10 -top-16 h-56 w-56 bg-amber/60" />
-            <button
-              type="button"
-              onClick={() => input.current?.click()}
-              onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-              onDragLeave={() => setOver(false)}
-              onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files); }}
-              className={`relative flex min-h-[340px] w-full cursor-pointer flex-col items-center justify-center rounded-[22px] border-2 border-dashed px-6 py-12 text-center transition ${
-                over ? "border-amber bg-amber/10" : "border-line-strong bg-surface-2/60 hover:border-amber/60 hover:bg-surface-2"
-              }`}
-            >
-              <span className="bg-ember-gradient grid h-16 w-16 place-items-center rounded-full text-[#1f0f05] shadow-[0_12px_40px_-8px_rgba(232,116,44,0.8)]">
-                <Icon name="upload" className="h-7 w-7" />
-              </span>
-              <span className="mt-6 font-display text-[34px] uppercase leading-none tracking-wide">Solte o vídeo aqui</span>
-              <span className="mt-3 text-[15px] text-muted">
-                ou <span className="font-semibold text-gold underline decoration-amber/50 underline-offset-4">clique para escolher</span> no computador
-              </span>
-              <span className="mt-6 text-xs text-faint">MP4, MOV ou WebM. Vídeos longos funcionam.</span>
-            </button>
-            <input
-              ref={input}
-              type="file"
-              accept="video/*,.mp4,.mov,.m4v,.webm,.mkv"
-              className="hidden"
-              onChange={(e) => { pick(e.target.files); e.target.value = ""; }}
-            />
-            <p className="relative px-4 pb-2 pt-4 text-[13px] leading-relaxed text-muted">
-              <strong className="text-cream">Precisa ter o vídeo baixado.</strong> Links do YouTube não funcionam aqui.
-              Baixe a pregação no computador e depois escolha o arquivo.
-            </p>
-          </Card>
+        {/* AREA DO ARQUIVO */}
+        <div className="rise mx-auto mt-16 max-w-[980px] text-left [animation-delay:100ms]">
+          <button
+            type="button"
+            onClick={open}
+            onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files); }}
+            className={`flex w-full cursor-pointer flex-col items-center justify-center rounded-[4px] border px-6 py-14 text-center transition-colors duration-200 ${
+              over ? "border-cyan bg-panel-2" : "border-line-strong bg-panel hover:border-white/60"
+            }`}
+          >
+            <span className="grid h-12 w-12 place-items-center border border-white/70 text-white">
+              <Icon name="upload" className="h-5 w-5" />
+            </span>
+            <span className="mt-5 font-display text-[30px] font-bold uppercase leading-none tracking-[0.04em]">
+              Solte o vídeo aqui
+            </span>
+            <span className="mt-3 text-mist">ou clique para escolher no computador. MP4, MOV ou WebM.</span>
+          </button>
+          <input
+            ref={input}
+            type="file"
+            accept="video/*,.mp4,.mov,.m4v,.webm,.mkv"
+            className="hidden"
+            onChange={(e) => { pick(e.target.files); e.target.value = ""; }}
+          />
+          <p className="mt-4 text-center text-[15px] text-mist">
+            <strong className="font-semibold text-white">Precisa ter o vídeo baixado.</strong> Links do YouTube não
+            funcionam aqui: baixe a pregação no computador e escolha o arquivo.
+          </p>
 
           {notice && (
             <div
               role={notice.kind === "error" ? "alert" : "status"}
-              className={`mt-4 rounded-2xl border px-5 py-4 text-sm leading-relaxed ${
-                notice.kind === "error" ? "border-danger/40 bg-danger/10 text-[#ffd2c4]" : "border-amber/30 bg-amber/10 text-gold"
+              className={`mt-6 border-l-2 px-5 py-4 text-[15px] ${
+                notice.kind === "error" ? "border-danger bg-danger/10 text-white" : "border-cyan bg-cyan/10 text-white"
               }`}
             >
               {notice.text}
             </div>
           )}
 
-          {/* AJUSTES */}
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <Card className="p-5 sm:col-span-3">
-              <div className="flex items-baseline justify-between">
-                <span className="text-sm font-semibold">Intervalo de análise</span>
-                <span className="text-xs text-faint">menor = mais preciso, mais demorado</span>
-              </div>
-              <div className="mt-4 grid grid-cols-4 gap-1.5 rounded-full bg-surface-2 p-1.5" role="radiogroup" aria-label="Intervalo de análise">
-                {INTERVALS.map((v) => (
+          {/* AJUSTES em grade de 3, espacamento de 12 px */}
+          <div className="mt-12 grid gap-3 md:grid-cols-3">
+            <Panel className="p-6">
+              <p className="eyebrow text-mist">Intervalo de análise</p>
+              <div className="mt-5 grid grid-cols-4 border border-line-strong" role="radiogroup" aria-label="Intervalo de análise">
+                {INTERVALS.map((v, i) => (
                   <button
                     key={v}
                     role="radio"
                     aria-checked={settings.interval === v}
                     onClick={() => onSettings({ ...settings, interval: v })}
-                    className={`h-10 cursor-pointer rounded-full text-sm font-semibold transition ${
-                      settings.interval === v ? "bg-cream text-[#1f0f05]" : "text-muted hover:text-cream"
-                    }`}
+                    className={`h-11 cursor-pointer font-display text-[17px] font-semibold transition-colors duration-200 ${
+                      i ? "border-l border-line-strong" : ""
+                    } ${settings.interval === v ? "bg-white text-abyss" : "text-mist hover:text-white"}`}
                   >
                     {String(v).replace(".", ",")} s
                   </button>
                 ))}
               </div>
-            </Card>
+              <p className="mt-3 text-[13px] text-faint">Menor fica mais preciso e demora mais.</p>
+            </Panel>
             <Slider
-              className="sm:col-span-3 lg:col-span-3 xl:col-span-3"
               label="Quantidade de fotos"
               value={settings.count}
               min={4}
               max={30}
-              suffix=" fotos"
+              unit="fotos"
               onChange={(count) => onSettings({ ...settings, count })}
             />
             <Slider
-              className="sm:col-span-3"
-              label="Distância mínima entre fotos"
+              label="Distância entre fotos"
               value={settings.minGap}
               min={2}
               max={30}
-              suffix=" s"
+              unit="segundos"
               onChange={(minGap) => onSettings({ ...settings, minGap })}
             />
           </div>
         </div>
       </section>
 
-      {/* COMO FUNCIONA */}
-      <section id="como-funciona" className="mx-auto max-w-[1240px] px-4 pb-24 sm:px-8">
-        <div className="rounded-[36px] border border-line bg-surface px-6 py-12 sm:px-12 sm:py-16">
-          <div className="flex flex-wrap items-end justify-between gap-6">
-            <h2 className="font-display text-[clamp(44px,6vw,84px)] uppercase leading-[0.9]">
-              Como <span className="text-gradient">funciona</span>
-            </h2>
-            <p className="max-w-[380px] text-muted">
-              Tudo acontece no seu navegador. Nada é enviado para servidor nenhum, por isso é rápido e privado.
-            </p>
-          </div>
-          <div className="mt-12 grid gap-4 md:grid-cols-3">
+      {/* FAIXA DE FATOS, como os selos da referencia */}
+      <section className="border-y border-line bg-abyss">
+        <div className="mx-auto grid max-w-[980px] grid-cols-2 md:grid-cols-4">
+          {[
+            ["100%", "no seu navegador"],
+            ["PNG", "frame inteiro"],
+            ["4:5", "recorte vertical"],
+            [".ZIP", "todas de uma vez"],
+          ].map(([big, small], i) => (
+            <div key={big} className={`px-6 py-8 text-center ${i ? "md:border-l md:border-line" : ""} ${i % 2 ? "border-l border-line md:border-l" : ""} ${i >= 2 ? "border-t border-line md:border-t-0" : ""}`}>
+              <p className="font-display text-[40px] font-bold leading-none">{big}</p>
+              <p className="eyebrow mt-2 text-[11px] text-mist">{small}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* COMO FUNCIONA, com corte diagonal */}
+      <section id="como-funciona" className="slant-top -mt-px bg-ocean px-4 pb-24 pt-32 sm:px-6">
+        <div className="mx-auto max-w-[980px]">
+          <p className="eyebrow text-center text-white/80">Pronto para a arte de domingo?</p>
+          <h2 className="mt-4 text-center font-display text-[clamp(44px,6vw,72px)] font-extrabold uppercase leading-[0.92]">
+            Em três passos, <span className="text-sunrise">sem complicação</span>
+          </h2>
+          <div className="mt-14 grid gap-3 md:grid-cols-3">
             {[
-              ["01", "Escolha o vídeo", "Arraste o arquivo da pregação. Pode ser um culto inteiro."],
-              ["02", "A gente varre tudo", "O site olha o vídeo inteiro, encontra os rostos e descobre quem é o pregador."],
-              ["03", "Baixe as melhores", "Fotos nítidas, de frente e de olhos abertos, em PNG e já no recorte 4:5."],
+              ["01", "Escolha o vídeo", "Arraste o arquivo da pregação. Pode ser o culto inteiro, de uma ou duas horas."],
+              ["02", "O site varre tudo", "Ele olha o vídeo do começo ao fim, separa as pessoas e descobre quem é o pregador."],
+              ["03", "Baixe as melhores", "Fotos nítidas, de frente e de olhos abertos. Em PNG e já no recorte 4:5."],
             ].map(([n, t, d]) => (
-              <div key={n} className="rounded-[26px] border border-line bg-surface-2 p-7">
-                <span className="font-display text-6xl leading-none text-gradient">{n}</span>
-                <h3 className="mt-6 text-xl font-semibold">{t}</h3>
-                <p className="mt-2 leading-relaxed text-muted">{d}</p>
+              <div key={n} className="rounded-[4px] bg-navy p-7">
+                <span className="font-display text-[64px] font-extrabold leading-none text-cyan">{n}</span>
+                <h3 className="mt-6 font-display text-[26px] font-bold uppercase leading-tight tracking-[0.02em]">{t}</h3>
+                <p className="mt-2 text-mist">{d}</p>
               </div>
             ))}
+          </div>
+          <div className="mt-14 text-center">
+            <Button variant="outline" onClick={open}>
+              Escolher vídeo
+            </Button>
           </div>
         </div>
       </section>
@@ -173,21 +180,19 @@ export function Home({
 }
 
 function Slider({
-  label, value, min, max, suffix, onChange, className = "",
+  label, value, min, max, unit, onChange,
 }: {
-  label: string; value: number; min: number; max: number; suffix: string;
-  onChange: (v: number) => void; className?: string;
+  label: string; value: number; min: number; max: number; unit: string; onChange: (v: number) => void;
 }) {
   const fill = ((value - min) / (max - min)) * 100;
   return (
-    <Card className={`p-5 ${className}`}>
-      <div className="flex items-baseline justify-between">
-        <label className="text-sm font-semibold">{label}</label>
-        <span className="font-display text-2xl leading-none text-gold">
-          {value}
-          <span className="font-sans text-sm text-muted">{suffix}</span>
-        </span>
+    <Panel className="p-6">
+      <div className="flex items-baseline justify-between gap-3">
+        <label className="eyebrow text-mist">{label}</label>
       </div>
+      <p className="mt-3 font-display text-[40px] font-bold leading-none">
+        {value} <span className="text-[17px] font-medium uppercase tracking-[0.12em] text-mist">{unit}</span>
+      </p>
       <input
         type="range"
         min={min}
@@ -198,10 +203,10 @@ function Slider({
         style={{ ["--fill" as string]: `${fill}%` }}
         className="mt-5"
       />
-      <div className="mt-2 flex justify-between text-xs text-faint">
+      <div className="mt-2 flex justify-between text-[13px] text-faint">
         <span>{min}</span>
         <span>{max}</span>
       </div>
-    </Card>
+    </Panel>
   );
 }
