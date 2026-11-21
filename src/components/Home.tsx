@@ -74,10 +74,16 @@ export function Home({
             className="hidden"
             onChange={(e) => { pick(e.target.files); e.target.value = ""; }}
           />
-          <p className="mt-4 text-center text-[15px] text-mist">
-            <strong className="font-semibold text-white">Precisa ter o vídeo baixado.</strong> Links do YouTube não
-            funcionam aqui: baixe a pregação no computador e escolha o arquivo.
-          </p>
+          <div className="mt-4 grid gap-3 text-[15px] text-mist md:grid-cols-2">
+            <p className="border-l-2 border-cyan pl-4">
+              <strong className="font-semibold text-white">Use o arquivo do vídeo.</strong> Link do YouTube não
+              funciona: o YouTube não deixa outros sites lerem os vídeos dele.
+            </p>
+            <p className="border-l-2 border-line-strong pl-4">
+              <strong className="font-semibold text-white">Pregação no canal da igreja?</strong> No YouTube Studio, vá
+              em Conteúdo, clique nos três pontos do vídeo e escolha Baixar. Ou peça o arquivo à equipe de mídia.
+            </p>
+          </div>
 
           {notice && (
             <div
