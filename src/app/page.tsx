@@ -1,9 +1,9 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import JSZip from "jszip";
-import { ImportView, SettingsPanel, type ImportHandle } from "@/components/Home";
+import { ImportView, type ImportHandle } from "@/components/Home";
 import { ResultsView } from "@/components/Results";
-import { InspectorSection, Shell, WorkHeader } from "@/components/Shell";
+import { Accent, Shell, StepHero } from "@/components/Shell";
 import { Button } from "@/components/ui";
 import { getAnalyzer } from "@/lib/analyzer-client";
 import { groupPeople } from "@/lib/people";
@@ -318,78 +318,61 @@ export default function Page() {
   const pct = progress ? (progress.done / progress.total) * 100 : 0;
   const durMin = srcRef.current ? srcRef.current.duration / 60 : 0;
 
-  const selectedPerson = people[selected];
-
-  const inspector =
-    phase === "inicio" ? (
-      <SettingsPanel settings={settings} onSettings={setSettings} />
-    ) : phase === "varredura" ? (
-      <>
-        <InspectorSection title="Progresso">
-          <p className="headline text-[56px] tabular-nums">{Math.floor(pct)}%</p>
-          <dl className="divide-y divide-hairline/70 text-[14px]">
-            <Row label="Minutos analisados" value={`${Math.floor((progress?.videoSeconds ?? 0) / 60)} de ${Math.ceil(durMin)}`} />
-            <Row label="Tempo restante" value={progress?.etaSeconds != null ? etaLabel(progress.etaSeconds).replace("cerca de ", "") : "calculando"} />
-            <Row label="Rostos encontrados" value={`${progress?.facesFound ?? 0}`} />
-            <Row label="Processamento" value={engine ? (engine.landmarker === "GPU" ? "Placa de vídeo" : "Processador") : "..."} />
-          </dl>
-          <Button variant="outline" className="w-full" onClick={cancelScan}>
-            Pausar análise
-          </Button>
-          <p className="-mt-2 text-[12px] leading-[1.33] text-ink-2">O progresso é salvo sozinho. Escolha o mesmo vídeo depois para continuar.</p>
-        </InspectorSection>
-      </>
-    ) : (
-      <>
-        {selectedPerson && (
-          <InspectorSection title="Pessoa selecionada">
-            <div className="flex items-center gap-4">
-              {selectedPerson.thumb && <img src={selectedPerson.thumb} alt="" className="h-16 w-16 rounded-[12px] object-cover" />}
-              <div>
-                <p className="text-[17px] font-semibold">{selected === 0 ? "Provável pregador" : `Pessoa ${selected + 1}`}</p>
-                <p className="text-[14px] text-ink-2">Em {Math.max(1, Math.round(selectedPerson.percent))}% do vídeo</p>
-              </div>
-            </div>
-          </InspectorSection>
-        )}
-        <SettingsPanel settings={settings} onSettings={setSettings} showInterval={false} />
-        <Button className="w-full" disabled={!!selecting || !picks.length} onClick={() => choosePerson(selected, people, true)}>
-          Buscar outras fotos
-        </Button>
-        <p className="px-2 text-[12px] leading-[1.33] text-ink-2">Procura de novo no mesmo vídeo, sem repetir as fotos que já apareceram.</p>
-        <Button variant="outline" className="w-full" disabled={!!selecting} onClick={() => choosePerson(selected, people)}>
-          Refazer seleção
-        </Button>
-        <p className="px-2 text-[12px] leading-[1.33] text-ink-2">Volta para as melhores fotos, usando a quantidade e a distância acima.</p>
-      </>
-    );
+  const etaText = progress?.etaSeconds != null ? etaLabel(progress.etaSeconds).replace("cerca de ", "") : "calculando";
 
   return (
     <>
-      <Shell inspector={inspector} recents={recents} onRecent={onRecent} onHome={reset} showRecents={phase === "inicio"}>
-        {phase === "inicio" && <ImportView ref={importRef} onFile={onFile} notice={notice} />}
+      <Shell recents={recents} onRecent={onRecent} onHome={reset} showRecents={phase === "inicio"}>
+        {phase === "inicio" && (
+          <ImportView ref={importRef} onFile={onFile} notice={notice} settings={settings} onSettings={setSettings} />
+        )}
 
         {/* ANALISE: fica montada para o canvas da previa existir durante a varredura */}
         <div className={phase === "varredura" ? "" : "hidden"}>
-          <WorkHeader step={1} title="Analisando." subtitle={fileName} />
-          <div className="mt-10">
-            <div className="grid aspect-video w-full place-items-center overflow-hidden rounded-[18px] bg-ink shadow-[var(--shadow-card)]">
-              <canvas ref={previewRef} className="max-h-full max-w-full" aria-label="Quadro sendo analisado" />
-            </div>
-            <div className="mt-5 h-1 overflow-hidden rounded-full bg-fill">
-              <div className="h-full rounded-full bg-blue transition-[width] duration-300" style={{ width: `${Math.max(1, pct)}%` }} />
-            </div>
-            <p className="mt-3 text-[14px] text-ink-2" aria-live="polite">{status}</p>
+          <StepHero
+            step={1}
+            title={<>Analisando <Accent>o vídeo</Accent></>}
+            subtitle={<>Pode deixar rodando. Faltam <strong className="font-semibold text-ink">{etaText}</strong>. O progresso é salvo sozinho.</>}
+            actions={
+              <Button variant="outline" onClick={cancelScan}>
+                Pausar análise
+              </Button>
+            }
+          />
+
+          <div className="mt-10 flex flex-wrap items-end gap-x-10 gap-y-4">
+            <p className="title text-[96px] tabular-nums text-ink" aria-live="polite">{Math.floor(pct)}%</p>
+            <dl className="mb-3 grid grid-cols-3 gap-x-8 text-[14px]">
+              <div>
+                <dt className="text-ink-2">Minutos</dt>
+                <dd className="text-[17px] font-semibold tabular-nums">{Math.floor((progress?.videoSeconds ?? 0) / 60)} de {Math.ceil(durMin)}</dd>
+              </div>
+              <div>
+                <dt className="text-ink-2">Rostos</dt>
+                <dd className="text-[17px] font-semibold tabular-nums">{progress?.facesFound ?? 0}</dd>
+              </div>
+              <div>
+                <dt className="text-ink-2">Usando</dt>
+                <dd className="text-[17px] font-semibold">{engine ? (engine.landmarker === "GPU" ? "Placa de vídeo" : "Processador") : "..."}</dd>
+              </div>
+            </dl>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-fill">
+            <div className="h-full rounded-full bg-blue transition-[width] duration-300" style={{ width: `${Math.max(1, pct)}%` }} />
+          </div>
+          <p className="mt-2 truncate text-[13px] text-ink-2">{status} · {fileName}</p>
+
+          <div className="mt-8 grid aspect-video w-full max-w-[880px] place-items-center overflow-hidden rounded-[18px] bg-ink shadow-[var(--shadow-card)]">
+            <canvas ref={previewRef} className="max-h-full max-w-full" aria-label="Quadro sendo analisado" />
           </div>
         </div>
 
         {phase === "resultado" && (
           <>
             {notice && (
-              <div role="alert" className="mt-6 rounded-[12px] bg-[#fff0f0] px-5 py-4 text-[14px] text-red">{notice.text}</div>
+              <div role="alert" className="mt-6 rounded-[12px] bg-[#e8f2fd] px-5 py-4 text-[15px] text-ink">{notice.text}</div>
             )}
             <ResultsView
-              fileName={fileName}
               people={people}
               selected={selected}
               onSelect={(i) => i !== selected && choosePerson(i, people)}
@@ -399,6 +382,10 @@ export default function Page() {
               onFull={onFull}
               onCrop={onCrop}
               onZip={onZip}
+              onMore={() => choosePerson(selected, people, true)}
+              onRedo={() => choosePerson(selected, people)}
+              settings={settings}
+              onSettings={setSettings}
             />
           </>
         )}
@@ -443,11 +430,3 @@ export default function Page() {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 py-2.5">
-      <dt className="text-ink-2">{label}</dt>
-      <dd className="tabular-nums text-ink">{value}</dd>
-    </div>
-  );
-}

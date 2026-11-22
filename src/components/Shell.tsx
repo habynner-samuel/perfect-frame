@@ -1,25 +1,22 @@
 "use client";
 import type { ReactNode } from "react";
 import type { ScanSummary } from "@/lib/storage";
-import { Card, Icon, SectionTitle, Wordmark } from "./ui";
+import { Card, Icon, Wordmark } from "./ui";
 
 export type Step = 0 | 1 | 2;
 
 /**
- * Estrutura no estilo da Apple: barra global fina e translucida no topo,
- * conteudo alinhado a esquerda em largura maxima, painel de resumo a direita
- * (como na pagina de configurar produto) e rodape cinza.
+ * Estrutura da pagina: barra fina no topo, uma coluna so (uma coisa por vez,
+ * de cima para baixo) e rodape. Nada disputando atencao na lateral.
  */
 export function Shell({
   children,
-  inspector,
   recents,
   onRecent,
   onHome,
   showRecents = false,
 }: {
   children: ReactNode;
-  inspector?: ReactNode;
   recents: ScanSummary[];
   onRecent: (r: ScanSummary) => void;
   onHome: () => void;
@@ -28,7 +25,7 @@ export function Shell({
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-40 bg-[var(--nav)] backdrop-blur-[20px] backdrop-saturate-[180%]">
-        <nav className="mx-auto flex h-11 max-w-[1024px] items-center justify-between px-4 text-[12px] text-ink/80 sm:px-6" aria-label="Principal">
+        <nav className="mx-auto flex h-11 max-w-[1100px] items-center justify-between px-4 text-[12px] text-ink/80 sm:px-6" aria-label="Principal">
           <button onClick={onHome} className="cursor-pointer text-ink hover:text-ink/70" aria-label="Início">
             <Wordmark />
           </button>
@@ -46,29 +43,25 @@ export function Shell({
       </header>
 
       <main className="flex-1">
-        <div className="mx-auto grid max-w-[1200px] gap-8 px-4 pb-20 sm:px-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="min-w-0">{children}</div>
-          {inspector && (
-            <aside className="xl:pt-[164px]" aria-label="Ajustes">
-              <div className="space-y-4 xl:sticky xl:top-16">{inspector}</div>
-            </aside>
-          )}
-        </div>
+        <div className="mx-auto max-w-[1100px] px-4 pb-20 sm:px-6">{children}</div>
 
         {showRecents && recents.length > 0 && (
-          <section className="mx-auto max-w-[1200px] px-4 pb-20 sm:px-6">
-            <SectionTitle title="Recentes." tail="Escolha o mesmo arquivo para continuar." />
-            <div className="mt-5 flex gap-4 overflow-x-auto pb-4">
+          <section className="mx-auto max-w-[1100px] px-4 pb-20 sm:px-6">
+            <h2 className="text-[17px] font-semibold">Análises recentes</h2>
+            <p className="mt-1 text-[14px] text-ink-2">Escolha o mesmo arquivo de novo para abrir ou continuar.</p>
+            <div className="mt-4 flex gap-3 overflow-x-auto pb-4">
               {recents.slice(0, 8).map((r) => (
                 <button
                   key={r.key}
                   onClick={() => onRecent(r)}
                   title={r.fileName}
-                  className="w-[260px] shrink-0 cursor-pointer rounded-[18px] bg-surface p-5 text-left shadow-[var(--shadow-card)] transition-shadow duration-300 hover:shadow-[var(--shadow-card-hover)]"
+                  className="flex w-[260px] shrink-0 cursor-pointer items-center gap-3 rounded-[14px] bg-surface p-4 text-left shadow-[var(--shadow-card)] transition-shadow duration-300 hover:shadow-[var(--shadow-card-hover)]"
                 >
-                  <Icon name="clock" className="h-6 w-6 text-ink-2" />
-                  <p className="mt-6 truncate text-[17px] font-semibold">{r.fileName}</p>
-                  <p className="mt-1 text-[14px] text-ink-2">{r.done ? "Análise concluída" : `${r.percent}% analisado`}</p>
+                  <Icon name="clock" className="h-5 w-5 shrink-0 text-ink-2" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[14px] font-semibold">{r.fileName}</span>
+                    <span className="block text-[12px] text-ink-2">{r.done ? "Análise concluída" : `${r.percent}% analisado`}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -77,7 +70,7 @@ export function Shell({
       </main>
 
       <footer id="ajuda" className="border-t border-hairline/70 bg-bg">
-        <div className="mx-auto max-w-[1024px] px-4 py-5 text-[12px] leading-[1.33] text-ink-2 sm:px-6">
+        <div className="mx-auto max-w-[1100px] px-4 py-5 text-[12px] leading-[1.33] text-ink-2 sm:px-6">
           <p className="border-b border-hairline/70 pb-4">
             O vídeo é lido no seu computador e não é enviado para lugar nenhum. Para conseguir o arquivo de uma pregação
             do canal da igreja, abra o YouTube Studio, vá em Conteúdo, clique nos três pontos do vídeo e escolha Baixar.
@@ -89,40 +82,62 @@ export function Shell({
   );
 }
 
-/** Cabecalho da pagina: titulo grande a esquerda, como "Comprar Mac", e etapas. */
-export function WorkHeader({ title, subtitle, step, actions }: { title: string; subtitle?: string; step: Step; actions?: ReactNode }) {
-  const steps = ["Vídeo", "Análise", "Pessoa e fotos"];
+const STEPS = ["Vídeo", "Análise", "Fotos"];
+
+/**
+ * Cabecalho de cada etapa, na ordem de leitura:
+ * 1. onde estou ("Passo 1 de 3"), 2. o que fazer (titulo grande),
+ * 3. por que (uma frase), 4. a acao principal.
+ */
+export function StepHero({
+  step,
+  title,
+  subtitle,
+  actions,
+}: {
+  step: Step;
+  title: ReactNode;
+  subtitle?: ReactNode;
+  actions?: ReactNode;
+}) {
   return (
-    <div className="pt-10 sm:pt-14">
-      <div className="flex flex-wrap items-end justify-between gap-6">
-        <div className="min-w-0">
-          <h1 className="headline text-[48px] sm:text-[64px] lg:text-[80px]">{title}</h1>
-          {subtitle && <p className="mt-3 max-w-[680px] truncate text-[21px] leading-[1.38] text-ink-2">{subtitle}</p>}
+    <header className="pt-12 sm:pt-16">
+      <div className="flex items-center gap-4">
+        <p className="kicker text-blue">
+          Passo {step + 1} de 3 <span className="text-ink-3">· {STEPS[step]}</span>
+        </p>
+        <div className="flex gap-1" aria-hidden>
+          {STEPS.map((s, i) => (
+            <span key={s} className={`h-[3px] w-8 rounded-full ${i <= step ? "bg-blue" : "bg-hairline"}`} />
+          ))}
         </div>
-        {actions}
       </div>
-      <ol className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-2 border-b border-hairline pb-3 text-[14px]" aria-label="Etapas">
-        {steps.map((s, i) => (
-          <li
-            key={s}
-            aria-current={i === step ? "step" : undefined}
-            className={`flex items-center gap-1.5 ${i === step ? "font-semibold text-ink" : i < step ? "text-ink" : "text-ink-3"}`}
-          >
-            {i < step ? <Icon name="check" className="h-3.5 w-3.5 text-blue" /> : <span className="tabular-nums">{i + 1}.</span>}
-            {s}
-          </li>
-        ))}
-      </ol>
-    </div>
+      <h1 className="title mt-4 text-[52px] sm:text-[72px] lg:text-[88px]">{title}</h1>
+      {subtitle && <p className="mt-5 max-w-[640px] text-[19px] leading-[1.42] text-ink-2 sm:text-[21px]">{subtitle}</p>}
+      {actions && <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">{actions}</div>}
+    </header>
   );
 }
 
-/** Bloco do painel de resumo: cartao branco com titulo. */
-export function InspectorSection({ title, children }: { title: string; children: ReactNode }) {
+/** Destaque em azul dentro do titulo, como nos sites de referencia. */
+export function Accent({ children }: { children: ReactNode }) {
+  return <span className="text-blue">{children}</span>;
+}
+
+/** Bloco recolhido para o que e opcional (ajustes). */
+export function Disclosure({ title, hint, children, open = false }: { title: string; hint?: string; children: ReactNode; open?: boolean }) {
   return (
-    <Card className="p-6">
-      <h3 className="text-[17px] font-semibold">{title}</h3>
-      <div className="mt-4 space-y-5">{children}</div>
+    <Card className="overflow-hidden">
+      <details open={open}>
+        <summary className="flex cursor-pointer items-center justify-between gap-4 px-6 py-5">
+          <span>
+            <span className="block text-[17px] font-semibold">{title}</span>
+            {hint && <span className="block text-[14px] text-ink-2">{hint}</span>}
+          </span>
+          <Icon name="chevron" className="chev h-4 w-4 shrink-0 text-ink-2 transition-transform duration-200" />
+        </summary>
+        <div className="border-t border-hairline/70 px-6 py-6">{children}</div>
+      </details>
     </Card>
   );
 }

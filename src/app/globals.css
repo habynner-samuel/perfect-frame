@@ -34,6 +34,7 @@
   --color-red: var(--red);
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", var(--font-inter), "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", var(--font-inter), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-title: var(--font-anton), Impact, "Arial Narrow Bold", sans-serif;
   --shadow-card: 2px 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-card-hover: 2px 4px 16px rgba(0, 0, 0, 0.16);
 }
@@ -65,6 +66,27 @@ body {
   letter-spacing: -0.015em;
   line-height: 1.05;
 }
+
+/* Titulo de etapa: condensado, caixa alta, linhas bem juntas */
+.title {
+  font-family: var(--font-title);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.005em;
+  line-height: 0.92;
+}
+
+/* Rotulo pequeno acima do titulo ("Passo 1 de 3") */
+.kicker {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details[open] .chev { transform: rotate(90deg); }
 
 input[type="range"] {
   -webkit-appearance: none;
