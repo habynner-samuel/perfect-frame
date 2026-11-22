@@ -51,7 +51,7 @@ export const ImportView = forwardRef<ImportHandle, {
               if (link.trim()) onYouTube(link.trim());
             }}
           >
-            <label htmlFor="link-youtube" className="block text-[17px] font-semibold">Ou cole o link do YouTube</label>
+            <label htmlFor="link-youtube" className="block text-[17px] font-semibold">Importar do YouTube</label>
             <p className="mt-1 text-[14px] text-ink-2">
               Baixa uma versão leve só para analisar. As fotos escolhidas saem da versão em alta qualidade.
             </p>
@@ -65,7 +65,7 @@ export const ImportView = forwardRef<ImportHandle, {
                 onChange={(e) => setLink(e.target.value)}
                 className="h-11 flex-1 rounded-[12px] border border-hairline bg-surface px-4 text-[17px] text-ink placeholder:text-ink-3 focus:border-blue focus:outline-none"
               />
-              <Button type="submit" disabled={!link.trim()}>Analisar link</Button>
+              <Button type="submit" disabled={!link.trim()}>Importar</Button>
             </div>
           </form>
         </Card>

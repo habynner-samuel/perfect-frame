@@ -1,21 +1,20 @@
 import type { NextConfig } from "next";
 
-const isDev = process.env.NODE_ENV !== "production";
-
-// Isolamento de origem (COOP/COEP) libera multithread no WASM.
-// Em producao, os mesmos cabecalhos ficam no vercel.json.
+// Isolamento de origem (COOP/COEP) libera multithread no WASM do analisador.
+// Os mesmos cabecalhos tambem estao no vercel.json.
 const isolation = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
 ];
 
 const nextConfig: NextConfig = {
-  output: "export",
+  // Sem "output: export": as rotas /api/frame (importacao do YouTube) rodam
+  // no servidor do Next.js, onde fica o token da Frame API.
   images: { unoptimized: true },
   reactStrictMode: true,
-  ...(isDev
-    ? { async headers() { return [{ source: "/:path*", headers: isolation }]; } }
-    : {}),
+  async headers() {
+    return [{ source: "/:path*", headers: isolation }];
+  },
 };
 
 export default nextConfig;

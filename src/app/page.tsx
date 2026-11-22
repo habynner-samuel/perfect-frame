@@ -14,7 +14,7 @@ import {
 import { deleteScan, listScans, loadScan, type ScanSummary } from "@/lib/storage";
 import type { EngineInfo, Person, Pick, ScanData, ScanSettings } from "@/lib/types";
 import { fileKey, VideoSource } from "@/lib/video";
-import { downloadVersion, fetchVersion, helperAvailable } from "@/lib/youtube-local";
+import { exportFrames, fetchPreview, importAvailable, importPreview, videoIdOf } from "@/lib/frame-import";
 
 type Phase = "inicio" | "varredura" | "resultado";
 type Notice = { kind: "error" | "info"; text: string } | null;
@@ -51,8 +51,8 @@ export default function Page() {
   const fpsRef = useRef(30);
   const importRef = useRef<ImportHandle>(null);
   /** video do YouTube em analise: as fotos saem da versao alta */
-  const ytRef = useRef<{ link: string; id: string; title: string } | null>(null);
-  const hqSrcRef = useRef<VideoSource | null>(null);
+  const ytRef = useRef<{ jobId: string; title: string } | null>(null);
+  /** fotos em alta ja recebidas da API, por instante (segundos) */
   const hqCache = useRef(new Map<number, HTMLCanvasElement>());
   const dlAbort = useRef<AbortController | null>(null);
 
@@ -80,7 +80,7 @@ export default function Page() {
     // ja comeca a baixar os modelos em segundo plano
     if (!p) getAnalyzer().ready.then(setEngine).catch(() => {});
     refreshRecents();
-    helperAvailable().then(setYtAvailable);
+    importAvailable().then(setYtAvailable);
   }, [refreshRecents]);
 
   /** Garante que so uma tarefa usa o video por vez. */
@@ -98,8 +98,6 @@ export default function Page() {
     dlAbort.current?.abort();
     setDl(null);
     ytRef.current = null;
-    hqSrcRef.current?.dispose();
-    hqSrcRef.current = null;
     hqCache.current.clear();
     scanAbort.current?.abort();
     selAbort.current?.abort();
@@ -286,7 +284,10 @@ export default function Page() {
     [startScan]
   );
 
-  /** Link do YouTube: baixa a versao leve pelo ajudante local e analisa. */
+  /**
+   * Link do YouTube: a Frame API baixa a versao leve (ate 360p); o navegador
+   * recebe o MP4 direto dela e segue o mesmo fluxo do upload.
+   */
   const onYouTube = useCallback(
     async (link: string) => {
       setNotice(null);
@@ -295,28 +296,29 @@ export default function Page() {
       setFileName("Vídeo do YouTube");
       setProgress(null);
       setDl({ loaded: 0, total: 0 });
-      setStatus("Baixando a versão leve do YouTube");
+      setStatus("Preparando a importação");
       setPhase("varredura");
       window.scrollTo({ top: 0, behavior: "smooth" });
+      const t0 = performance.now();
       try {
-        const job = await downloadVersion(link, "low", (j) => {
-          setDl({ loaded: j.loaded, total: j.total });
+        const job = await importPreview(link, (j) => {
           if (j.title) setFileName(j.title);
+          if (j.state === "downloading") setStatus("Baixando a versão leve (até 360p) no servidor");
         }, ctrl.signal);
         if (ctrl.signal.aborted) return;
-        setStatus("Abrindo o vídeo");
-        const file = await fetchVersion(job.id, "low", job.title);
-        ytRef.current = { link, id: job.id, title: job.title };
-        hqSrcRef.current?.dispose();
-        hqSrcRef.current = null;
+        setStatus("Recebendo a prévia");
+        const file = await fetchPreview(job, videoIdOf(link) ?? job.id);
+        console.info(`[import] prévia pronta em ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+        const title = job.title || "Vídeo do YouTube";
+        ytRef.current = { jobId: job.id, title };
         hqCache.current.clear();
         setDl(null);
-        await onFile(file, job.title || "Vídeo do YouTube");
+        await onFile(file, title);
       } catch (e) {
         if (ctrl.signal.aborted || (e as DOMException)?.name === "AbortError") return;
         setDl(null);
         setPhase("inicio");
-        setNotice({ kind: "error", text: (e as Error).message || "Não deu para baixar esse vídeo." });
+        setNotice({ kind: "error", text: (e as Error).message || "Não deu para importar esse vídeo. Use o upload do arquivo." });
       }
     },
     [onFile]
@@ -352,29 +354,32 @@ export default function Page() {
   const baseName = (p: Pick) => `pregador_${timeLabel(p.t)}`;
 
   /**
-   * Frame para baixar. Vindo do YouTube, sai da versao alta (baixada na
-   * primeira vez que precisar); vindo de arquivo, do proprio arquivo.
+   * Frame para baixar. Vindo do YouTube, as fotos saem da versao alta: na
+   * primeira vez, um unico pedido exporta todas as fotos da lista (a API baixa
+   * ate 1080p uma vez e extrai os PNGs com FFmpeg). Vindo de arquivo, sai do
+   * proprio arquivo.
    */
   const frameFor = async (p: Pick): Promise<HTMLCanvasElement> => {
     const yt = ytRef.current;
     if (!yt) return srcRef.current!.canvasAt(p.t);
     const hit = hqCache.current.get(p.t);
     if (hit) return hit;
-    if (!hqSrcRef.current) {
-      setNotice({ kind: "info", text: "Baixando a versão em alta qualidade para as fotos. Só na primeira vez." });
-      await downloadVersion(yt.link, "high", (j) => {
-        const pc = j.total ? Math.floor((j.loaded / j.total) * 100) : 0;
-        setNotice({ kind: "info", text: `Baixando a versão em alta qualidade para as fotos: ${pc}%. Só na primeira vez.` });
-      });
-      const file = await fetchVersion(yt.id, "high", yt.title);
-      const v = document.createElement("video");
-      v.style.display = "none";
-      document.body.appendChild(v);
-      hqSrcRef.current = await VideoSource.open(file, v);
-      setNotice(null);
-    }
-    const c = await hqSrcRef.current.canvasAt(p.t);
-    hqCache.current.set(p.t, c);
+    const wanted = [...new Set([...picks.map((x) => x.t), p.t])].filter((t) => !hqCache.current.has(t)).slice(0, 30);
+    if (!wanted.includes(p.t)) wanted[wanted.length - 1] = p.t;
+    setNotice({ kind: "info", text: `Preparando ${wanted.length} fotos em alta qualidade no servidor. Na primeira vez ele baixa o vídeo em até 1080p.` });
+    const t0 = performance.now();
+    const { frames, source } = await exportFrames(yt.jobId, wanted, (j) => {
+      if (j.state === "exporting") setNotice({ kind: "info", text: `Preparando ${wanted.length} fotos em alta qualidade no servidor...` });
+    });
+    console.info(`[import] ${frames.size} fotos exportadas em ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+    for (const [t, c] of frames) hqCache.current.set(t, c);
+    const h = source?.height ?? 0;
+    setNotice({
+      kind: "info",
+      text: h >= 1080 ? `Fotos em ${h}p.` : `Fotos em ${h}p, a maior resolução disponível desse vídeo (até 1080p).`,
+    });
+    const c = hqCache.current.get(p.t);
+    if (!c) throw new Error("A foto em alta não chegou. Tente de novo.");
     return c;
   };
 
