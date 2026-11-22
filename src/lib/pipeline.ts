@@ -265,16 +265,31 @@ function toPng(c: HTMLCanvasElement): Promise<Blob> {
   );
 }
 
-export async function fullPng(src: VideoSource, p: Pick): Promise<Blob> {
-  return toPng(await src.canvasAt(p.t));
+/** Frame inteiro em PNG, a partir do canvas do frame. */
+export function fullPng(frame: HTMLCanvasElement): Promise<Blob> {
+  return toPng(frame);
 }
 
-export async function cropPng(src: VideoSource, p: Pick): Promise<Blob> {
-  await src.seek(p.t);
+/**
+ * Recorte 4:5 em PNG. O recorte foi calculado na resolucao da analise; se o
+ * frame vier em resolucao maior (versao alta do YouTube), a caixa e ampliada
+ * na mesma proporcao.
+ */
+export function cropPng(frame: HTMLCanvasElement, p: Pick): Promise<Blob> {
+  const k = frame.width / p.frameWidth;
+  let h = Math.min(frame.height, Math.floor((p.crop.h * k) / 5) * 5);
+  let w = (h / 5) * 4;
+  if (w > frame.width) {
+    w = Math.floor(frame.width / 4) * 4;
+    h = (w / 4) * 5;
+  }
+  const cx = (p.crop.x + p.crop.w / 2) * k;
+  const x = Math.round(Math.max(0, Math.min(frame.width - w, cx - w / 2)));
+  const y = Math.round(Math.max(0, Math.min(frame.height - h, p.crop.y * k)));
   const c = document.createElement("canvas");
-  c.width = p.crop.w;
-  c.height = p.crop.h;
-  c.getContext("2d")!.drawImage(src.video, p.crop.x, p.crop.y, p.crop.w, p.crop.h, 0, 0, p.crop.w, p.crop.h);
+  c.width = w;
+  c.height = h;
+  c.getContext("2d")!.drawImage(frame, x, y, w, h, 0, 0, w, h);
   return toPng(c);
 }
 

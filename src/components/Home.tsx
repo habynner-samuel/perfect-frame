@@ -14,9 +14,12 @@ export const ImportView = forwardRef<ImportHandle, {
   notice: { kind: "error" | "info"; text: string } | null;
   settings: ScanSettings;
   onSettings: (s: ScanSettings) => void;
-}>(function ImportView({ onFile, notice, settings, onSettings }, ref) {
+  /** so aparece quando o ajudante local do YouTube esta rodando */
+  onYouTube?: (link: string) => void;
+}>(function ImportView({ onFile, notice, settings, onSettings, onYouTube }, ref) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
+  const [link, setLink] = useState("");
   const open = () => input.current?.click();
   useImperativeHandle(ref, () => ({ openPicker: open }));
   const pick = (files: FileList | null) => {
@@ -39,6 +42,34 @@ export const ImportView = forwardRef<ImportHandle, {
           </>
         }
       />
+
+      {onYouTube && (
+        <Card className="mt-10 p-6">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (link.trim()) onYouTube(link.trim());
+            }}
+          >
+            <label htmlFor="link-youtube" className="block text-[17px] font-semibold">Ou cole o link do YouTube</label>
+            <p className="mt-1 text-[14px] text-ink-2">
+              Baixa uma versão leve só para analisar. As fotos escolhidas saem da versão em alta qualidade.
+            </p>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <input
+                id="link-youtube"
+                type="url"
+                inputMode="url"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                className="h-11 flex-1 rounded-[12px] border border-hairline bg-surface px-4 text-[17px] text-ink placeholder:text-ink-3 focus:border-blue focus:outline-none"
+              />
+              <Button type="submit" disabled={!link.trim()}>Analisar link</Button>
+            </div>
+          </form>
+        </Card>
+      )}
 
       {notice && (
         <div

@@ -14,10 +14,11 @@ import {
 import { deleteScan, listScans, loadScan, type ScanSummary } from "@/lib/storage";
 import type { EngineInfo, Person, Pick, ScanData, ScanSettings } from "@/lib/types";
 import { fileKey, VideoSource } from "@/lib/video";
+import { downloadVersion, fetchVersion, helperAvailable } from "@/lib/youtube-local";
 
 type Phase = "inicio" | "varredura" | "resultado";
 type Notice = { kind: "error" | "info"; text: string } | null;
-type Resume = { file: File; saved: ScanData } | null;
+type Resume = { file: File; saved: ScanData; displayName?: string } | null;
 
 const VIDEO_EXT = /\.(mp4|m4v|mov|webm|mkv|ogv)$/i;
 
@@ -49,6 +50,11 @@ export default function Page() {
   const videoLock = useRef<Promise<unknown>>(Promise.resolve());
   const fpsRef = useRef(30);
   const importRef = useRef<ImportHandle>(null);
+  /** video do YouTube em analise: as fotos saem da versao alta */
+  const ytRef = useRef<{ link: string; id: string; title: string } | null>(null);
+  const hqSrcRef = useRef<VideoSource | null>(null);
+  const hqCache = useRef(new Map<number, HTMLCanvasElement>());
+  const dlAbort = useRef<AbortController | null>(null);
 
   const [phase, setPhase] = useState<Phase>("inicio");
   const [settings, setSettings] = useState<ScanSettings>({ interval: 1, count: 12, minGap: 6 });
@@ -64,6 +70,8 @@ export default function Page() {
   const [selecting, setSelecting] = useState<{ done: number; total: number; label: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [recents, setRecents] = useState<ScanSummary[]>([]);
+  const [ytAvailable, setYtAvailable] = useState(false);
+  const [dl, setDl] = useState<{ loaded: number; total: number } | null>(null);
   const refreshRecents = useCallback(() => { listScans().then(setRecents); }, []);
 
   useEffect(() => {
@@ -72,6 +80,7 @@ export default function Page() {
     // ja comeca a baixar os modelos em segundo plano
     if (!p) getAnalyzer().ready.then(setEngine).catch(() => {});
     refreshRecents();
+    helperAvailable().then(setYtAvailable);
   }, [refreshRecents]);
 
   /** Garante que so uma tarefa usa o video por vez. */
@@ -86,6 +95,12 @@ export default function Page() {
 
   const reset = useCallback(() => {
     shownRef.current.clear();
+    dlAbort.current?.abort();
+    setDl(null);
+    ytRef.current = null;
+    hqSrcRef.current?.dispose();
+    hqSrcRef.current = null;
+    hqCache.current.clear();
     scanAbort.current?.abort();
     selAbort.current?.abort();
     srcRef.current?.dispose();
@@ -147,7 +162,7 @@ export default function Page() {
   );
 
   const startScan = useCallback(
-    async (file: File, saved: ScanData | null) => {
+    async (file: File, saved: ScanData | null, displayName?: string) => {
       setResume(null);
       setNotice(null);
       const video = videoRef.current!;
@@ -164,7 +179,8 @@ export default function Page() {
         return;
       }
 
-      setFileName(file.name);
+      setFileName(displayName ?? file.name);
+      setDl(null);
       setPhase("varredura");
       setProgress(null);
       setStatus("Preparando a análise");
@@ -193,7 +209,7 @@ export default function Page() {
       const totalFrames = Math.floor(Math.max(0, src.duration - 0.05) / interval) + 1;
       const data: ScanData = saved ?? {
         key: fileKey(file),
-        fileName: file.name,
+        fileName: displayName ?? file.name,
         interval,
         duration: src.duration,
         width: src.width,
@@ -253,20 +269,57 @@ export default function Page() {
   );
 
   const onFile = useCallback(
-    async (file: File) => {
+    async (file: File, displayName?: string) => {
       setNotice(null);
+      if (!displayName) ytRef.current = null;
       if (!file.type.startsWith("video/") && !VIDEO_EXT.test(file.name)) {
         setNotice({ kind: "error", text: "Esse arquivo não é um vídeo. Escolha um arquivo MP4, MOV ou WebM." });
         return;
       }
       const saved = await loadScan(fileKey(file));
       if (saved && saved.frames.length > 0) {
-        setResume({ file, saved });
+        setResume({ file, saved, displayName });
         return;
       }
-      startScan(file, null);
+      startScan(file, null, displayName);
     },
     [startScan]
+  );
+
+  /** Link do YouTube: baixa a versao leve pelo ajudante local e analisa. */
+  const onYouTube = useCallback(
+    async (link: string) => {
+      setNotice(null);
+      const ctrl = new AbortController();
+      dlAbort.current = ctrl;
+      setFileName("Vídeo do YouTube");
+      setProgress(null);
+      setDl({ loaded: 0, total: 0 });
+      setStatus("Baixando a versão leve do YouTube");
+      setPhase("varredura");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      try {
+        const job = await downloadVersion(link, "low", (j) => {
+          setDl({ loaded: j.loaded, total: j.total });
+          if (j.title) setFileName(j.title);
+        }, ctrl.signal);
+        if (ctrl.signal.aborted) return;
+        setStatus("Abrindo o vídeo");
+        const file = await fetchVersion(job.id, "low", job.title);
+        ytRef.current = { link, id: job.id, title: job.title };
+        hqSrcRef.current?.dispose();
+        hqSrcRef.current = null;
+        hqCache.current.clear();
+        setDl(null);
+        await onFile(file, job.title || "Vídeo do YouTube");
+      } catch (e) {
+        if (ctrl.signal.aborted || (e as DOMException)?.name === "AbortError") return;
+        setDl(null);
+        setPhase("inicio");
+        setNotice({ kind: "error", text: (e as Error).message || "Não deu para baixar esse vídeo." });
+      }
+    },
+    [onFile]
   );
 
   const onRecent = (r: ScanSummary) => {
@@ -279,6 +332,12 @@ export default function Page() {
   };
 
   const cancelScan = () => {
+    if (dl) {
+      dlAbort.current?.abort();
+      setDl(null);
+      setPhase("inicio");
+      return;
+    }
     scanAbort.current?.abort();
     srcRef.current?.dispose();
     srcRef.current = null;
@@ -292,16 +351,50 @@ export default function Page() {
 
   const baseName = (p: Pick) => `pregador_${timeLabel(p.t)}`;
 
+  /**
+   * Frame para baixar. Vindo do YouTube, sai da versao alta (baixada na
+   * primeira vez que precisar); vindo de arquivo, do proprio arquivo.
+   */
+  const frameFor = async (p: Pick): Promise<HTMLCanvasElement> => {
+    const yt = ytRef.current;
+    if (!yt) return srcRef.current!.canvasAt(p.t);
+    const hit = hqCache.current.get(p.t);
+    if (hit) return hit;
+    if (!hqSrcRef.current) {
+      setNotice({ kind: "info", text: "Baixando a versão em alta qualidade para as fotos. Só na primeira vez." });
+      await downloadVersion(yt.link, "high", (j) => {
+        const pc = j.total ? Math.floor((j.loaded / j.total) * 100) : 0;
+        setNotice({ kind: "info", text: `Baixando a versão em alta qualidade para as fotos: ${pc}%. Só na primeira vez.` });
+      });
+      const file = await fetchVersion(yt.id, "high", yt.title);
+      const v = document.createElement("video");
+      v.style.display = "none";
+      document.body.appendChild(v);
+      hqSrcRef.current = await VideoSource.open(file, v);
+      setNotice(null);
+    }
+    const c = await hqSrcRef.current.canvasAt(p.t);
+    hqCache.current.set(p.t, c);
+    return c;
+  };
+
+  const failDownload = (e: unknown) =>
+    setNotice({ kind: "error", text: (e as Error)?.message || "Não deu para baixar essa foto. Tente de novo." });
+
   const onFull = (p: Pick) =>
     withVideo(async () => {
       setBusy("full");
-      try { download(await fullPng(srcRef.current!, p), `${baseName(p)}.png`); } finally { setBusy(null); }
+      try { download(await fullPng(await frameFor(p)), `${baseName(p)}.png`); }
+      catch (e) { failDownload(e); }
+      finally { setBusy(null); }
     });
 
   const onCrop = (p: Pick) =>
     withVideo(async () => {
       setBusy("crop");
-      try { download(await cropPng(srcRef.current!, p), `${baseName(p)}_4x5.png`); } finally { setBusy(null); }
+      try { download(await cropPng(await frameFor(p), p), `${baseName(p)}_4x5.png`); }
+      catch (e) { failDownload(e); }
+      finally { setBusy(null); }
     });
 
   const onZip = () =>
@@ -312,11 +405,12 @@ export default function Page() {
         const full = zip.folder("frame-inteiro")!;
         const crop = zip.folder("recorte-4x5")!;
         for (const p of picks) {
-          full.file(`${baseName(p)}.png`, await fullPng(srcRef.current!, p));
-          crop.file(`${baseName(p)}_4x5.png`, await cropPng(srcRef.current!, p));
+          const frame = await frameFor(p);
+          full.file(`${baseName(p)}.png`, await fullPng(frame));
+          crop.file(`${baseName(p)}_4x5.png`, await cropPng(frame, p));
         }
         const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
-        const stem = fileName.replace(/\.[^.]+$/, "") || "pregacao";
+        const stem = fileName.replace(/\.[^.]+$/, "").replace(/[^\w\- ]+/g, "").trim().slice(0, 60) || "pregacao";
         download(blob, `frames_${stem}.zip`);
       } catch {
         setNotice({ kind: "error", text: "Não deu para montar o zip. Baixe as fotos uma a uma ou tente de novo." });
@@ -325,7 +419,7 @@ export default function Page() {
       }
     });
 
-  const pct = progress ? (progress.done / progress.total) * 100 : 0;
+  const pct = dl ? (dl.total ? (dl.loaded / dl.total) * 100 : 0) : progress ? (progress.done / progress.total) * 100 : 0;
   const durMin = srcRef.current ? srcRef.current.duration / 60 : 0;
 
   const etaText = progress?.etaSeconds != null ? etaLabel(progress.etaSeconds).replace("cerca de ", "") : "calculando";
@@ -334,7 +428,7 @@ export default function Page() {
     <>
       <Shell recents={recents} onRecent={onRecent} onHome={reset} showRecents={phase === "inicio"}>
         {phase === "inicio" && (
-          <ImportView ref={importRef} onFile={onFile} notice={notice} settings={settings} onSettings={setSettings} />
+          <ImportView ref={importRef} onFile={(f) => onFile(f)} notice={notice} settings={settings} onSettings={setSettings} onYouTube={ytAvailable ? onYouTube : undefined} />
         )}
 
         {/* ANALISE: fica montada para o canvas da previa existir durante a varredura */}
@@ -418,7 +512,7 @@ export default function Page() {
                 : `A análise parou em ${Math.floor((resume.saved.nextIndex / resume.saved.totalFrames) * 100)}%. Dá para continuar de onde parou.`}
             </p>
             <div className="mt-7 flex flex-col gap-2">
-              <Button onClick={() => startScan(resume.file, resume.saved)}>
+              <Button onClick={() => startScan(resume.file, resume.saved, resume.displayName)}>
                 {resume.saved.done ? "Abrir resultado" : "Continuar"}
               </Button>
               <Button
@@ -426,7 +520,7 @@ export default function Page() {
                 onClick={async () => {
                   const f = resume.file;
                   await deleteScan(resume.saved.key);
-                  startScan(f, null);
+                  startScan(f, null, resume.displayName);
                 }}
               >
                 Começar do zero

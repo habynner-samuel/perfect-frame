@@ -10,6 +10,17 @@ npm run dev        # http://localhost:3000
 npm run build      # gera o site estático em out/
 ```
 
+## Link do YouTube (só no seu computador)
+
+Rodando localmente, o site aceita link do YouTube. Quem baixa é o yt-dlp, na sua internet:
+
+```bash
+python -m pip install -U "yt-dlp[default]"   # uma vez só
+npm run dev                                   # sobe o site e o ajudante local (porta 3001)
+```
+
+O ajudante (`scripts/youtube-local.mjs`) baixa uma versão leve (até 360p) para a análise. Na hora de baixar as fotos, baixa a versão em até 1080p uma vez e tira as fotos dela, nos mesmos instantes. Os arquivos ficam numa pasta temporária e são apagados depois de 24 h. Na versão publicada na Vercel o campo de link não aparece.
+
 ## Estrutura
 
 - `src/app/page.tsx`: fluxo da tela (início, varredura, escolha da pessoa, resultado).
