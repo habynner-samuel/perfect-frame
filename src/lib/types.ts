@@ -49,7 +49,7 @@ export interface FrameResult {
   height: number;
   faces: FaceRecord[];
   /** tempos internos do worker (ms), para diagnostico */
-  ms?: { draw: number; detect: number; measure: number; embed: number };
+  ms?: { draw: number; detect: number; measure: number; embed: number; skipped?: number; reused?: number };
 }
 
 export interface ScanSettings {
@@ -131,7 +131,7 @@ export type WorkerRequest =
   | { id: number; type: "init" }
   | { id: number; type: "analyze"; t: number; bitmap: ImageBitmap; mode?: "scan" | "full"; roi?: Box }
   | { id: number; type: "pose"; bitmap: ImageBitmap; face: Box }
-  | { id: number; type: "config"; tiling: { frac?: number; maxY?: number; overlap?: number }; delegate?: "GPU" | "CPU"; thresholds?: { det: number; pres: number } };
+  | { id: number; type: "config"; tiling: { frac?: number; maxY?: number; overlap?: number }; delegate?: "GPU" | "CPU"; thresholds?: { det: number; pres: number }; reuseWindow?: number };
 
 export type WorkerResponse =
   | { id: number; type: "ready"; info: EngineInfo }

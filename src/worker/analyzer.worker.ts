@@ -58,7 +58,9 @@ async function loadModel(url: string): Promise<ArrayBuffer> {
  * inicializacao com threads trava. Testamos num worker descartavel primeiro.
  */
 async function probeThreads(): Promise<number> {
-  const want = Math.min(4, navigator.hardwareConcurrency || 2);
+  // worker extra da varredura em paralelo: recebe um teto de threads no nome
+  const cap = Number(/threads=(\d+)/.exec(self.name)?.[1] ?? 4);
+  const want = Math.min(4, cap, navigator.hardwareConcurrency || 2);
   if (!self.crossOriginIsolated || want < 2) return 1;
   return new Promise<number>((resolve) => {
     let probe: Worker | null = null;
@@ -181,6 +183,7 @@ async function init(id: number): Promise<EngineInfo> {
     }
   }
   if (!sface) throw new Error("Não foi possível iniciar o reconhecimento de rostos.");
+  await initYunet();
 
   info = { landmarker: lmDelegate, recognizer: `${used.toUpperCase()} ${bestMs.toFixed(0)}ms ${ort.env.wasm.numThreads}t` };
   return info;
@@ -478,6 +481,208 @@ async function analyze(t: number, bitmap: ImageBitmap, mode: "scan" | "full", ro
 }
 
 // ---------------------------------------------------------------------------
+// Varredura rapida com YuNet: um detector de rostos pequeno (227 KB) que acha
+// rostos pequenos numa unica passada no quadro, e ja devolve os 5 pontos
+// (olhos, nariz, cantos da boca) que o SFace precisa. O FaceLandmarker fica
+// so para o refinamento, onde olhos e boca importam.
+
+const YUNET_URL = "/models/face_detection_yunet_2023mar.onnx";
+const YUNET_SIZE = 640;
+const YUNET_SCORE = 0.7;
+let yunet: OrtTypes.InferenceSession | null = null;
+let yunetCanvas: OffscreenCanvas | null = null;
+let yunetCtx: OffscreenCanvasRenderingContext2D | null = null;
+
+async function initYunet() {
+  if (yunet) return;
+  const buf = await loadModel(YUNET_URL);
+  yunet = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"], graphOptimizationLevel: "all", logSeverityLevel: 3 });
+}
+
+interface YuFace { x: number; y: number; w: number; h: number; score: number; kps: Pt[] }
+
+function nms(faces: YuFace[], thr: number): YuFace[] {
+  faces.sort((a, b) => b.score - a.score);
+  const kept: YuFace[] = [];
+  for (const f of faces) {
+    const ok = kept.every((k) => {
+      const x0 = Math.max(k.x, f.x), y0 = Math.max(k.y, f.y);
+      const x1 = Math.min(k.x + k.w, f.x + f.w), y1 = Math.min(k.y + k.h, f.y + f.h);
+      const inter = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
+      return inter / (k.w * k.h + f.w * f.h - inter) < thr;
+    });
+    if (ok) kept.push(f);
+  }
+  return kept;
+}
+
+/** Roda o YuNet no quadro reduzido e devolve rostos em pixels do frame cheio. */
+async function detectYunet(bitmap: ImageBitmap, ms: { draw: number; detect: number }): Promise<YuFace[]> {
+  const W = bitmap.width, H = bitmap.height;
+  // o modelo aceita so 640x640: o quadro entra inteiro, com borda preta embaixo
+  const iw = YUNET_SIZE, ih = YUNET_SIZE;
+  const s = Math.min(iw / W, ih / H);
+  const dw = Math.round(W * s), dh = Math.round(H * s);
+  if (!yunetCanvas || yunetCanvas.width !== iw || yunetCanvas.height !== ih) {
+    yunetCanvas = new OffscreenCanvas(iw, ih);
+    yunetCtx = yunetCanvas.getContext("2d", { willReadFrequently: true })!;
+  }
+  let c0 = performance.now();
+  yunetCtx!.fillStyle = "#000";
+  yunetCtx!.fillRect(0, 0, iw, ih);
+  yunetCtx!.drawImage(bitmap, 0, 0, dw, dh);
+  const { data } = yunetCtx!.getImageData(0, 0, iw, ih);
+  const plane = iw * ih;
+  const input = new Float32Array(3 * plane);
+  for (let i = 0, p = 0; i < plane; i++, p += 4) {
+    input[i] = data[p + 2];             // B
+    input[plane + i] = data[p + 1];     // G
+    input[2 * plane + i] = data[p];     // R
+  }
+  ms.draw += performance.now() - c0;
+
+  c0 = performance.now();
+  const out = await yunet!.run({ [yunet!.inputNames[0]]: new ort.Tensor("float32", input, [1, 3, ih, iw]) });
+  ms.detect += performance.now() - c0;
+
+  const faces: YuFace[] = [];
+  for (const stride of [8, 16, 32]) {
+    const cls = out[`cls_${stride}`].data as Float32Array;
+    const obj = out[`obj_${stride}`].data as Float32Array;
+    const bbox = out[`bbox_${stride}`].data as Float32Array;
+    const kps = out[`kps_${stride}`].data as Float32Array;
+    const cols = iw / stride, rows = ih / stride;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const i = r * cols + c;
+        const score = Math.sqrt(clamp01(cls[i]) * clamp01(obj[i]));
+        if (score < YUNET_SCORE) continue;
+        const cx = (c + bbox[i * 4]) * stride, cy = (r + bbox[i * 4 + 1]) * stride;
+        const w = Math.exp(bbox[i * 4 + 2]) * stride, h = Math.exp(bbox[i * 4 + 3]) * stride;
+        const pts: Pt[] = [];
+        for (let k = 0; k < 5; k++) {
+          pts.push([((kps[i * 10 + 2 * k] + c) * stride) / s, ((kps[i * 10 + 2 * k + 1] + r) * stride) / s]);
+        }
+        faces.push({ x: (cx - w / 2) / s, y: (cy - h / 2) / s, w: w / s, h: h / s, score, kps: pts });
+      }
+    }
+  }
+  return nms(faces, 0.3).filter((f) => f.h >= 16);
+}
+
+// Reaproveita a impressao digital de quem continua no mesmo lugar: rosto com
+// boa sobreposicao a um rosto recente e a mesma pessoa, nao precisa do SFace.
+interface Track { box: Box; emb: Float32Array; embAt: number; seenAt: number }
+let tracks: Track[] = [];
+let reuseWindow = 4;
+
+function boxIou(a: Box, b: Box) {
+  const x0 = Math.max(a.x, b.x), y0 = Math.max(a.y, b.y);
+  const x1 = Math.min(a.x + a.w, b.x + b.w), y1 = Math.min(a.y + a.h, b.y + b.h);
+  const inter = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
+  return inter / (a.w * a.h + b.w * b.h - inter);
+}
+
+// Quadro praticamente igual ao anterior (camera parada, ninguem mexendo):
+// repete o resultado anterior sem rodar os modelos.
+const thumbCanvas = new OffscreenCanvas(64, 36);
+const thumbCtx = thumbCanvas.getContext("2d", { willReadFrequently: true })!;
+let lastThumb: Float32Array | null = null;
+let lastResult: { t: number; faces: FaceRecord[] } | null = null;
+const STATIC_DIFF = 1.6;
+
+function frameThumb(bitmap: ImageBitmap) {
+  thumbCtx.drawImage(bitmap, 0, 0, 64, 36);
+  const { data } = thumbCtx.getImageData(0, 0, 64, 36);
+  const g = new Float32Array(64 * 36);
+  for (let i = 0, p = 0; i < g.length; i++, p += 4) g[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+  return g;
+}
+
+/** Estimativa de giro e inclinacao a partir dos 5 pontos. */
+function poseFromKps(k: Pt[]) {
+  const [le, re, nose] = k;
+  const midX = (le[0] + re[0]) / 2;
+  const eyeDist = Math.hypot(re[0] - le[0], re[1] - le[1]) || 1;
+  // calibrado contra a pose do FaceLandmarker: o nariz se desloca ~0,6 x a
+  // distancia entre os olhos vezes a tangente do giro
+  const yaw = (Math.atan((nose[0] - midX) / eyeDist / 0.6) * 180) / Math.PI;
+  const roll = (Math.atan2(re[1] - le[1], re[0] - le[0]) * 180) / Math.PI;
+  return { yaw, roll };
+}
+
+async function analyzeFast(t: number, bitmap: ImageBitmap): Promise<FrameResult> {
+  const W = bitmap.width, H = bitmap.height;
+  const ms = { draw: 0, detect: 0, measure: 0, embed: 0, skipped: 0, reused: 0 };
+
+  const thumb = frameThumb(bitmap);
+  if (lastThumb && lastResult && t > lastResult.t && t - lastResult.t <= reuseWindow) {
+    let diff = 0;
+    for (let i = 0; i < thumb.length; i++) diff += Math.abs(thumb[i] - lastThumb[i]);
+    if (diff / thumb.length < STATIC_DIFF) {
+      ms.skipped = 1;
+      lastResult = { t, faces: lastResult.faces.map((f) => ({ ...f, t })) };
+      return { t, width: W, height: H, faces: lastResult.faces, ms };
+    }
+  }
+  lastThumb = thumb;
+
+  const found = await detectYunet(bitmap, ms);
+  tracks = tracks.filter((tr) => t - tr.seenAt <= reuseWindow && tr.seenAt <= t);
+  const faces: FaceRecord[] = [];
+  for (const f of found) {
+    const bx = Math.max(0, f.x), by = Math.max(0, f.y);
+    const bw = Math.min(W, f.x + f.w) - bx, bh = Math.min(H, f.y + f.h) - by;
+    if (bw < 8 || bh < 8) continue;
+    const box = { x: bx, y: by, w: bw, h: bh };
+    // pontos na ordem do SFace: olhos (esquerda->direita na imagem), nariz, boca
+    const eyes = [f.kps[0], f.kps[1]].sort((a, b) => a[0] - b[0]);
+    const mouth = [f.kps[3], f.kps[4]].sort((a, b) => a[0] - b[0]);
+    const pts: Pt[] = [eyes[0], eyes[1], f.kps[2], mouth[0], mouth[1]];
+    const { yaw, roll } = poseFromKps(pts);
+
+    let c0 = performance.now();
+    const { sharpness, light } = measureCrop(bitmap, bx, by, bw, bh);
+    ms.measure += performance.now() - c0;
+
+    let embedding: Float32Array;
+    const tr = tracks.find((k) => boxIou(k.box, box) >= 0.5 && t - k.embAt <= reuseWindow);
+    if (tr) {
+      embedding = tr.emb;
+      tr.box = box;
+      tr.seenAt = t;
+      ms.reused++;
+    } else {
+      c0 = performance.now();
+      embedding = await embed(bitmap, pts);
+      ms.embed += performance.now() - c0;
+      tracks.push({ box, emb: embedding, embAt: t, seenAt: t });
+    }
+
+    const expression = {} as Expression;
+    for (const k of EXPRESSION_KEYS) expression[k] = 0;
+    const cx = (bx + bw / 2) / W - 0.5, cy = (by + bh / 2) / H - 0.5;
+    faces.push({
+      t,
+      box,
+      area: (bw * bh) / (W * H),
+      centerDist: clamp01(Math.hypot(cx, cy) / Math.hypot(0.5, 0.5)),
+      sharpness,
+      light,
+      yaw,
+      pitch: 0,
+      roll,
+      confidence: f.score,
+      expression,
+      embedding,
+    });
+  }
+  lastResult = { t, faces };
+  return { t, width: W, height: H, faces, ms };
+}
+
+
+// ---------------------------------------------------------------------------
 // Postura do corpo. So roda nos frames finais (dezenas por video), entao usa
 // a CPU e e carregado na primeira vez que precisa.
 
@@ -589,6 +794,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       post({ id: msg.id, type: "ready", info: i });
     } else if (msg.type === "config") {
       Object.assign(tiling, msg.tiling);
+      if (msg.reuseWindow) reuseWindow = msg.reuseWindow;
       if (msg.thresholds && landmarker) {
         await landmarker.setOptions({
           minFaceDetectionConfidence: msg.thresholds.det,
@@ -608,7 +814,10 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       }
     } else if (msg.type === "analyze") {
       try {
-        const result = await analyze(msg.t, msg.bitmap, msg.mode ?? "scan", msg.roi);
+        const mode = msg.mode ?? "scan";
+        const result = mode === "scan" && !msg.roi && yunet
+          ? await analyzeFast(msg.t, msg.bitmap)
+          : await analyze(msg.t, msg.bitmap, mode, msg.roi);
         post({ id: msg.id, type: "result", result });
       } finally {
         msg.bitmap.close();

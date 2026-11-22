@@ -5,7 +5,7 @@ import { ImportView, type ImportHandle } from "@/components/Home";
 import { ResultsView } from "@/components/Results";
 import { Accent, Shell, StepHero } from "@/components/Shell";
 import { Button } from "@/components/ui";
-import { getAnalyzer } from "@/lib/analyzer-client";
+import { getAnalyzer, getScanPool } from "@/lib/analyzer-client";
 import { groupPeople } from "@/lib/people";
 import {
   cropPng, download, fullPng, makePreviews, makeThumbs, runScan, selectBest, timeLabel,
@@ -179,6 +179,16 @@ export default function Page() {
         return;
       }
 
+      // workers extras para analisar em paralelo; se algum falhar, segue so com o principal
+      let scanners = [client];
+      try {
+        const pool = getScanPool((m) => setStatus(m));
+        await pool.ready;
+        scanners = pool.clients;
+      } catch {
+        scanners = [client];
+      }
+
       const interval = saved?.interval ?? settings.interval;
       const totalFrames = Math.floor(Math.max(0, src.duration - 0.05) / interval) + 1;
       const data: ScanData = saved ?? {
@@ -206,7 +216,7 @@ export default function Page() {
             pv.width = 960;
             pv.height = Math.round((src.height / src.width) * 960);
           }
-          await withVideo(() => runScan(src, client, data, setProgress, ctrl.signal, pv));
+          await withVideo(() => runScan(src, scanners, data, setProgress, ctrl.signal, pv));
         }
       } catch {
         if (!ctrl.signal.aborted) {

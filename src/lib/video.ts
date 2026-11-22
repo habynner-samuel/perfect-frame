@@ -1,7 +1,7 @@
 // Leitura de frames de um arquivo de video local, sem enviar nada para fora.
 
 /** Contadores simples de desempenho (inspecionaveis em window.__fdpPerf). */
-export const perf = { seek: 0, bitmap: 0, grabs: 0, analyze: 0, analyzes: 0, w: { draw: 0, detect: 0, measure: 0, embed: 0 } };
+export const perf = { seek: 0, bitmap: 0, grabs: 0, analyze: 0, analyzes: 0, w: { draw: 0, detect: 0, measure: 0, embed: 0, skipped: 0, reused: 0 } as Record<string, number> };
 if (typeof window !== "undefined") (window as unknown as { __fdpPerf: typeof perf }).__fdpPerf = perf;
 
 export class VideoSource {
@@ -33,6 +33,30 @@ export class VideoSource {
     if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error("duracao");
     return new VideoSource(video, url);
   }
+
+  /**
+   * Outro leitor do mesmo arquivo, com seu proprio elemento de video oculto.
+   * Varios leitores permitem buscar frames em paralelo (cada busca leva ~60 ms).
+   */
+  async clone(): Promise<VideoSource> {
+    const v = document.createElement("video");
+    v.style.display = "none";
+    v.setAttribute("aria-hidden", "true");
+    document.body.appendChild(v);
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = "auto";
+    v.src = this.url;
+    await new Promise<void>((resolve, reject) => {
+      v.addEventListener("loadeddata", () => resolve(), { once: true });
+      v.addEventListener("error", () => reject(new Error("formato")), { once: true });
+    });
+    const c = new VideoSource(v, this.url);
+    c.isClone = true;
+    return c;
+  }
+
+  private isClone = false;
 
   get duration() { return this.video.duration; }
   get width() { return this.video.videoWidth; }
@@ -114,6 +138,10 @@ export class VideoSource {
   dispose() {
     this.video.removeAttribute("src");
     this.video.load();
+    if (this.isClone) {
+      this.video.remove();
+      return;
+    }
     URL.revokeObjectURL(this.url);
   }
 }

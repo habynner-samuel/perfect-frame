@@ -10,8 +10,9 @@ export class AnalyzerClient {
   private pending = new Map<number, Pending>();
   onProgress?: (message: string) => void;
 
-  constructor() {
-    this.worker = new Worker("/analyzer.worker.js");
+  /** maxThreads limita as threads do WASM quando ha varios workers em paralelo */
+  constructor(maxThreads?: number) {
+    this.worker = new Worker("/analyzer.worker.js", { name: maxThreads ? `threads=${maxThreads}` : "main" });
     this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
       const msg = e.data;
       if (msg.type === "progress") {
@@ -50,7 +51,7 @@ export class AnalyzerClient {
     const r = await this.call<FrameResult>({ type: "analyze", t, bitmap, ...opts } as WorkerRequest, [bitmap]);
     perf.analyze += performance.now() - t0;
     perf.analyzes++;
-    if (r.ms) for (const k of Object.keys(r.ms) as (keyof NonNullable<FrameResult["ms"]>)[]) perf.w[k] += r.ms[k];
+    if (r.ms) for (const [k, v] of Object.entries(r.ms)) perf.w[k] = (perf.w[k] ?? 0) + (v ?? 0);
     return r;
   }
 
@@ -60,13 +61,40 @@ export class AnalyzerClient {
   }
 
   /** Ajuste fino da deteccao em blocos (diagnostico). */
-  config(tiling: { frac?: number; maxY?: number; overlap?: number }, delegate?: "GPU" | "CPU", thresholds?: { det: number; pres: number }) {
-    return this.call<EngineInfo>({ type: "config", tiling, delegate, thresholds } as WorkerRequest);
+  config(tiling: { frac?: number; maxY?: number; overlap?: number }, delegate?: "GPU" | "CPU", thresholds?: { det: number; pres: number }, reuseWindow?: number) {
+    return this.call<EngineInfo>({ type: "config", tiling, delegate, thresholds, reuseWindow } as WorkerRequest);
   }
 
   terminate() {
     this.worker.terminate();
   }
+}
+
+/** Varios workers so para a varredura: cada um analisa um frame por vez. */
+let pool: { clients: AnalyzerClient[]; ready: Promise<EngineInfo[]> } | null = null;
+
+export function poolSize() {
+  const cores = navigator.hardwareConcurrency || 4;
+  return cores >= 8 ? 3 : cores >= 4 ? 2 : 1;
+}
+
+/** O primeiro e o worker principal; os outros sao extras so para a varredura. */
+export function getScanPool(onProgress?: (m: string) => void) {
+  const main = getAnalyzer(onProgress);
+  if (!pool) {
+    const n = poolSize();
+    const threads = Math.max(1, Math.floor((navigator.hardwareConcurrency || 4) / n));
+    const extras = Array.from({ length: n - 1 }, () => new AnalyzerClient(threads));
+    const clients = [main.client, ...extras];
+    const ready = Promise.all([main.ready, ...extras.map((c) => c.init())]).then(async (infos) => {
+      // reaproveitar a identidade vale por mais tempo quando os frames sao
+      // divididos entre varios workers (cada um ve 1 a cada n frames)
+      await Promise.all(clients.map((c) => c.config({}, undefined, undefined, 4 * n)));
+      return infos;
+    });
+    pool = { clients, ready: ready.catch((e) => { pool = null; throw e; }) };
+  }
+  return pool;
 }
 
 let shared: AnalyzerClient | null = null;

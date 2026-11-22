@@ -19,11 +19,12 @@ npm run build      # gera o site estático em out/
 - `src/lib/scoring.ts`: notas de cada frame, nota de expressão e recorte 4:5.
 - `src/lib/pipeline.ts`: varredura, refinamento nos frames vizinhos e exportação PNG/zip.
 - `src/lib/storage.ts`: progresso salvo no IndexedDB (só números, nunca imagens).
-- `public/models/`: `face_landmarker.task` (float16), `face_recognition_sface_2021dec.onnx` e `pose_landmarker_lite.task` (postura do corpo nas fotos finais).
+- `public/models/`: `face_landmarker.task` (float16), `face_recognition_sface_2021dec.onnx` , `pose_landmarker_lite.task` (postura do corpo nas fotos finais) e `face_detection_yunet_2023mar.onnx` (detector rápido da varredura).
 
 ## Decisões técnicas
 
-- **Detecção em blocos.** O detector embutido no FaceLandmarker é de curto alcance e quase não encontra rostos pequenos (pregador em plano aberto). Além do quadro inteiro reduzido para 960 px, o worker analisa blocos quadrados sobrepostos da parte de cima do quadro. Para não ficar lento, todos os blocos são olhados a cada 3 frames; nos outros, só os blocos onde apareceu rosto recentemente. No refinamento, só a região em volta do rosto candidato.
+- **Varredura rápida.** A varredura usa o YuNet (227 KB), que acha rostos pequenos numa única passada e já dá os 5 pontos que o SFace precisa. O FaceLandmarker (olhos, boca, pose da cabeça) só roda no refinamento das fotos finais. A impressão digital é reaproveitada quando o rosto continua no mesmo lugar, quadros praticamente iguais ao anterior são pulados, e a análise roda em 2 a 3 workers em paralelo, cada um com seu próprio leitor do vídeo.
+- **Detecção em blocos (refinamento).** O detector embutido no FaceLandmarker é de curto alcance e quase não encontra rostos pequenos (pregador em plano aberto). Além do quadro inteiro reduzido para 960 px, o worker analisa blocos quadrados sobrepostos da parte de cima do quadro. Para não ficar lento, todos os blocos são olhados a cada 3 frames; nos outros, só os blocos onde apareceu rosto recentemente. No refinamento, só a região em volta do rosto candidato.
 - **Acelerador escolhido por medição.** Na primeira carga o worker mede GPU e CPU (WASM) para o FaceLandmarker, e WebGPU, WebGL e WASM para o SFace, e usa o mais rápido em cada um. Em muitos computadores o WASM ganha porque cada chamada na GPU paga um custo fixo de sincronização.
 - **Confiança da detecção.** O FaceLandmarker não expõe a confiança. Usamos como aproximação a fração dos pontos do rosto dentro do quadro vezes o tamanho do rosto na imagem que o detector viu.
 - **Cache dos modelos.** Os modelos são baixados uma vez e guardados no Cache Storage do navegador. O `vercel.json` também manda cache longo para `/models` e `/vendor`.

@@ -19,7 +19,7 @@ const SAVE_EVERY_VIDEO_SECONDS = 30;
 /** Percorre o video pegando um frame a cada intervalo. */
 export async function runScan(
   src: VideoSource,
-  analyzer: AnalyzerClient,
+  analyzers: AnalyzerClient[],
   data: ScanData,
   onProgress: (p: ScanProgress) => void,
   signal: AbortSignal,
@@ -32,43 +32,70 @@ export async function runScan(
   let lastSavedT = startIndex * data.interval;
   let faces = data.frames.reduce((s, f) => s + f.faces.length, 0);
 
-  let inFlight: Promise<FrameResult> | null = null;
-  const collect = async () => {
-    if (!inFlight) return;
-    const r = await inFlight;
-    inFlight = null;
-    data.frames.push(r);
-    faces += r.faces.length;
-    data.nextIndex = data.frames.length;
-    const t = r.t;
-    const processed = data.nextIndex - startIndex;
-    const elapsed = (performance.now() - started) / 1000;
-    const rate = processed > 0 ? elapsed / processed : 0;
-    onProgress({
-      done: data.nextIndex,
-      total,
-      videoSeconds: Math.min(src.duration, t + data.interval),
-      etaSeconds: processed >= 3 ? rate * (total - data.nextIndex) : null,
-      facesFound: faces,
-    });
-    if (t - lastSavedT >= SAVE_EVERY_VIDEO_SECONDS) {
-      lastSavedT = t;
-      await saveScan(data);
+  // Uma "faixa" por worker, cada uma com seu proprio leitor de video: a faixa w
+  // analisa os frames w, w+n, w+2n... Os resultados entram na ordem do video.
+  const n = analyzers.length;
+  const sources: VideoSource[] = [src];
+  try {
+    for (let w = 1; w < n; w++) sources.push(await src.clone());
+  } catch {
+    /* sem leitor extra: as faixas dividem o mesmo video */
+  }
+  const results = new Map<number, FrameResult>();
+  let next = startIndex;
+  const flush = async () => {
+    while (results.has(next)) {
+      const r = results.get(next)!;
+      results.delete(next);
+      data.frames.push(r);
+      faces += r.faces.length;
+      next++;
+      data.nextIndex = next;
+      const processed = next - startIndex;
+      const elapsed = (performance.now() - started) / 1000;
+      const rate = processed > 0 ? elapsed / processed : 0;
+      onProgress({
+        done: next,
+        total,
+        videoSeconds: Math.min(src.duration, r.t + data.interval),
+        etaSeconds: processed >= 3 * n ? rate * (total - next) : null,
+        facesFound: faces,
+      });
+      if (r.t - lastSavedT >= SAVE_EVERY_VIDEO_SECONDS) {
+        lastSavedT = r.t;
+        await saveScan(data);
+      }
     }
   };
 
-  for (let i = startIndex; i < total; i++) {
-    if (signal.aborted) break;
-    const t = i * data.interval;
-    // busca o proximo frame enquanto o worker processa o anterior
-    const bitmap = await src.grab(t);
-    // previa ao vivo: desenha o proprio frame que vai ser analisado
-    if (pctx && preview) pctx.drawImage(bitmap, 0, 0, preview.width, preview.height);
-    await collect();
-    if (signal.aborted) { bitmap.close(); break; }
-    inFlight = analyzer.analyze(t, bitmap);
+  // se nao deu para abrir leitores extras, as faixas se revezam no mesmo video
+  const shared = sources.length < n;
+  let chain: Promise<unknown> = Promise.resolve();
+  const lock = <T,>(fn: () => Promise<T>): Promise<T> => {
+    const run = chain.then(fn, fn);
+    chain = run.catch(() => {});
+    return run;
+  };
+
+  const lane = async (w: number) => {
+    const reader = shared ? src : sources[w];
+    for (let i = startIndex + w; i < total; i += n) {
+      if (signal.aborted) return;
+      const t = i * data.interval;
+      const bitmap = shared ? await lock(() => reader.grab(t)) : await reader.grab(t);
+      // previa ao vivo: desenha o proprio frame que vai ser analisado
+      if (w === 0 && pctx && preview) pctx.drawImage(bitmap, 0, 0, preview.width, preview.height);
+      if (signal.aborted) { bitmap.close(); return; }
+      results.set(i, await analyzers[w].analyze(t, bitmap));
+      await flush();
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: n }, (_, w) => lane(w)));
+    await flush();
+  } finally {
+    for (const s of sources) if (s !== src) s.dispose();
   }
-  await collect();
 
   data.done = data.nextIndex >= total;
   await saveScan(data);
@@ -155,9 +182,10 @@ export async function selectBest(
     const fb = cand.f.box;
     const side = Math.max(fb.w, fb.h) * 5;
     const roi = { x: fb.x + fb.w / 2 - side / 2, y: fb.y + fb.h / 2 - side / 2, w: side, h: side };
-    const options: { face: FaceRecord; frame: FrameResult | undefined }[] = [{ face: cand.f, frame: bestFrame }];
+    // a varredura rapida nao mede olhos e boca: todos os frames, inclusive o
+    // da propria candidata, passam pelo detector completo aqui
+    const options: { face: FaceRecord; frame: FrameResult | undefined }[] = [];
     for (let j = -k; j <= k; j++) {
-      if (j === 0) continue;
       const t = cand.f.t + j * step;
       if (t < 0 || t > src.duration - 0.05) continue;
       const frame = await analyzer.analyze(t, await src.grab(t), { roi });
@@ -170,6 +198,7 @@ export async function selectBest(
     }
     // fica com o vizinho que junta nitidez e boa expressao (olhos abertos,
     // boca fechada), e nao so o mais nitido
+    if (!options.length) options.push({ face: cand.f, frame: bestFrame });
     const maxSharp = Math.max(...options.map((o) => o.face.sharpness), 1e-6);
     const pickScore = (o: (typeof options)[number]) => 0.55 * (o.face.sharpness / maxSharp) + 0.45 * expressionScore(o.face.expression);
     const chosen = options.reduce((a, b) => (pickScore(b) > pickScore(a) ? b : a));
