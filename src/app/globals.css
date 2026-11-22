@@ -52,8 +52,8 @@ body {
   background: var(--abyss);
   color: var(--white);
   font-family: var(--font-sans);
-  font-size: 17px;
-  line-height: 1.47;
+  font-size: 15px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
 }

@@ -52,3 +52,29 @@ export async function deleteScan(key: string): Promise<void> {
     /* ignora */
   }
 }
+
+export interface ScanSummary {
+  key: string;
+  fileName: string;
+  percent: number;
+  done: boolean;
+  updatedAt: number;
+}
+
+/** Analises salvas neste navegador, da mais recente para a mais antiga. */
+export async function listScans(): Promise<ScanSummary[]> {
+  try {
+    const all = (await tx("readonly", (s) => s.getAll())) as ScanData[];
+    return all
+      .map((d) => ({
+        key: d.key,
+        fileName: d.fileName,
+        percent: d.totalFrames ? Math.min(100, Math.round((d.nextIndex / d.totalFrames) * 100)) : 0,
+        done: d.done,
+        updatedAt: d.updatedAt,
+      }))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch {
+    return [];
+  }
+}
