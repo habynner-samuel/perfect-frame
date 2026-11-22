@@ -44,12 +44,12 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
 export function Wordmark({ className = "" }: { className?: string }) {
   return (
     <span className={`flex items-center gap-2 whitespace-nowrap ${className}`}>
-      <svg width="16" height="16" viewBox="0 0 64 64" aria-hidden>
+      <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden>
         <path d="M6 22V6h16M42 6h16v16M58 42v16H42M22 58H6V42" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
         <circle cx="32" cy="25" r="7" fill="currentColor" />
         <path d="M18 47c1.5-7 7-11 14-11s12.5 4 14 11z" fill="currentColor" />
       </svg>
-      <span className="text-[14px] font-semibold tracking-[-0.01em]">Frame do Pregador</span>
+      <span className="text-[17px] font-semibold tracking-[-0.01em]">Frame do Pregador</span>
     </span>
   );
 }

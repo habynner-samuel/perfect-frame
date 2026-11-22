@@ -74,9 +74,16 @@ export const ImportView = forwardRef<ImportHandle, {
         onChange={(e) => { pick(e.target.files); e.target.value = ""; }}
       />
 
-      <div className="mt-4">
+      <div className="mt-4 space-y-3">
         <Disclosure title="Ajustes da análise" hint="Opcional. O padrão funciona bem para a maioria dos cultos.">
           <SettingsFields settings={settings} onSettings={onSettings} />
+        </Disclosure>
+        <Disclosure title="Só tem o link do YouTube?" hint="Como conseguir o arquivo da pregação.">
+          <p className="text-[15px] leading-[1.5] text-ink-2">
+            Se a pregação está no canal da igreja, abra o YouTube Studio, vá em Conteúdo, clique nos três pontos do vídeo
+            e escolha Baixar. Ou peça o arquivo à equipe de mídia: ele vem com a melhor qualidade. O vídeo é lido no seu
+            computador e não é enviado para lugar nenhum.
+          </p>
         </Disclosure>
       </div>
 

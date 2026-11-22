@@ -6,8 +6,8 @@ import { Card, Icon, Wordmark } from "./ui";
 export type Step = 0 | 1 | 2;
 
 /**
- * Estrutura da pagina: barra fina no topo, uma coluna so (uma coisa por vez,
- * de cima para baixo) e rodape. Nada disputando atencao na lateral.
+ * Estrutura da pagina: barra preta no topo e uma coluna so (uma coisa por
+ * vez, de cima para baixo). Nada disputando atencao na lateral.
  */
 export function Shell({
   children,
@@ -24,21 +24,26 @@ export function Shell({
 }) {
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-40 bg-[var(--nav)] backdrop-blur-[20px] backdrop-saturate-[180%]">
-        <nav className="mx-auto flex h-11 max-w-[1100px] items-center justify-between px-4 text-[12px] text-ink/80 sm:px-6" aria-label="Principal">
-          <button onClick={onHome} className="cursor-pointer text-ink hover:text-ink/70" aria-label="Início">
+      <header className="sticky top-0 z-40 bg-black text-white">
+        <nav className="mx-auto flex h-14 max-w-[1100px] items-center justify-between gap-6 px-4 sm:px-6" aria-label="Principal">
+          <button onClick={onHome} className="shrink-0 cursor-pointer text-white hover:text-white/80" aria-label="Início">
             <Wordmark />
           </button>
-          <ul className="hidden items-center gap-8 md:flex">
-            <li>
-              <button onClick={onHome} className="cursor-pointer text-ink hover:text-ink/70" aria-current="page">Melhores frames</button>
+          <ul className="flex h-full items-stretch gap-1 sm:gap-2">
+            <li className="flex">
+              <button
+                onClick={onHome}
+                aria-current="page"
+                className="relative flex cursor-pointer items-center whitespace-nowrap px-2 text-[14px] font-semibold text-white sm:px-3 sm:text-[15px] after:absolute after:inset-x-3 after:bottom-0 after:h-[3px] after:rounded-full after:bg-white"
+              >
+                Melhores frames
+              </button>
             </li>
-            <li className="text-ink-3">Thumbnails com PSD (em breve)</li>
-            <li>
-              <a href="#ajuda" className="hover:text-ink">Ajuda</a>
+            <li className="hidden items-center gap-2 px-3 text-[15px] font-medium text-white/55 sm:flex" aria-disabled>
+              Thumbnails com PSD
+              <span className="rounded-full border border-white/30 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-white/70">Em breve</span>
             </li>
           </ul>
-          <span className="text-ink-2">Roda no seu computador</span>
         </nav>
       </header>
 
@@ -69,15 +74,6 @@ export function Shell({
         )}
       </main>
 
-      <footer id="ajuda" className="border-t border-hairline/70 bg-bg">
-        <div className="mx-auto max-w-[1100px] px-4 py-5 text-[12px] leading-[1.33] text-ink-2 sm:px-6">
-          <p className="border-b border-hairline/70 pb-4">
-            O vídeo é lido no seu computador e não é enviado para lugar nenhum. Para conseguir o arquivo de uma pregação
-            do canal da igreja, abra o YouTube Studio, vá em Conteúdo, clique nos três pontos do vídeo e escolha Baixar.
-          </p>
-          <p className="pt-4">Frame do Pregador. Feito para designers de igreja.</p>
-        </div>
-      </footer>
     </div>
   );
 }
