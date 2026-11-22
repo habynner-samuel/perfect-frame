@@ -1,6 +1,6 @@
 // Ponte entre a interface e o Web Worker de analise.
 import { perf } from "./video";
-import type { Box, EngineInfo, FrameResult, WorkerRequest, WorkerResponse } from "./types";
+import type { Box, EngineInfo, FrameResult, Posture, WorkerRequest, WorkerResponse } from "./types";
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
 
@@ -24,6 +24,7 @@ export class AnalyzerClient {
       if (msg.type === "error") p.reject(new Error(msg.message));
       else if (msg.type === "ready") p.resolve(msg.info);
       else if (msg.type === "result") p.resolve(msg.result);
+      else if (msg.type === "pose") p.resolve(msg.posture);
     };
     this.worker.onerror = (e) => {
       const err = new Error(e.message || "Erro no processamento");
@@ -51,6 +52,11 @@ export class AnalyzerClient {
     perf.analyzes++;
     if (r.ms) for (const k of Object.keys(r.ms) as (keyof NonNullable<FrameResult["ms"]>)[]) perf.w[k] += r.ms[k];
     return r;
+  }
+
+  /** Postura do corpo da pessoa cujo rosto esta em `face` (pixels do frame). */
+  pose(bitmap: ImageBitmap, face: Box): Promise<Posture> {
+    return this.call<Posture>({ type: "pose", bitmap, face } as WorkerRequest, [bitmap]);
   }
 
   /** Ajuste fino da deteccao em blocos (diagnostico). */

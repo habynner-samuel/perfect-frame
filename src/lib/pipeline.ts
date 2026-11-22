@@ -109,7 +109,9 @@ export async function selectBest(
   minGap: number,
   fps: number,
   onProgress: (p: SelectProgress) => void,
-  signal: AbortSignal
+  signal: AbortSignal,
+  /** tempos de fotos ja mostradas, para "buscar novamente" trazer outras */
+  exclude: number[] = []
 ): Promise<Pick[]> {
   const stats = personStats(person.faces);
   const framesByT = new Map<number, FrameResult>();
@@ -118,13 +120,24 @@ export async function selectBest(
   const othersOf = (face: FaceRecord, frame: FrameResult | undefined) =>
     (frame?.faces ?? []).filter((o) => o !== face && !(o.box.x === face.box.x && o.box.y === face.box.y));
 
-  // 1. nota base e candidatos (3x a quantidade, com distancia minima)
-  const ranked = person.faces
+  // fora: perto de fotos ja mostradas, perfil, rosto minusculo ou cortado na borda
+  const H0 = scan.height || src.height, W0 = scan.width || src.width;
+  const usable = (f: FaceRecord) =>
+    exclude.every((t) => Math.abs(t - f.t) >= minGap) &&
+    Math.abs(f.yaw) <= 35 &&
+    f.box.h / H0 >= 0.035 &&
+    f.box.x > W0 * 0.01 && f.box.x + f.box.w < W0 * 0.99 && f.box.y > H0 * 0.01;
+  let pool = person.faces.filter(usable);
+  if (pool.length < count) pool = person.faces.filter((f) => exclude.every((t) => Math.abs(t - f.t) >= minGap));
+
+  // 1. nota base e candidatos (4x a quantidade, com distancia minima): sobra
+  //    folga para descartar quem estiver torto ou com a mao no rosto
+  const ranked = pool
     .map((f) => ({ f, s: baseScore(f, othersOf(f, framesByT.get(f.t)), stats) }))
     .sort((a, b) => b.s - a.s);
   const candidates: typeof ranked = [];
   for (const r of ranked) {
-    if (candidates.length >= count * 3) break;
+    if (candidates.length >= count * 4) break;
     if (candidates.every((c) => Math.abs(c.f.t - r.f.t) >= minGap)) candidates.push(r);
   }
 
@@ -137,12 +150,12 @@ export async function selectBest(
 
   for (const cand of candidates) {
     if (signal.aborted) throw new DOMException("cancelado", "AbortError");
-    let best = cand.f;
     let bestFrame = framesByT.get(cand.f.t);
     // regiao em volta do rosto: o rosto quase nao se move em meio segundo
     const fb = cand.f.box;
     const side = Math.max(fb.w, fb.h) * 5;
     const roi = { x: fb.x + fb.w / 2 - side / 2, y: fb.y + fb.h / 2 - side / 2, w: side, h: side };
+    const options: { face: FaceRecord; frame: FrameResult | undefined }[] = [{ face: cand.f, frame: bestFrame }];
     for (let j = -k; j <= k; j++) {
       if (j === 0) continue;
       const t = cand.f.t + j * step;
@@ -153,21 +166,40 @@ export async function selectBest(
         const s = cosine(person.centroid, face.embedding);
         if (s >= sim) { sim = s; match = face; }
       }
-      if (match && match.sharpness > best.sharpness) {
-        best = match;
-        bestFrame = frame;
-      }
+      if (match) options.push({ face: match, frame });
     }
+    // fica com o vizinho que junta nitidez e boa expressao (olhos abertos,
+    // boca fechada), e nao so o mais nitido
+    const maxSharp = Math.max(...options.map((o) => o.face.sharpness), 1e-6);
+    const pickScore = (o: (typeof options)[number]) => 0.55 * (o.face.sharpness / maxSharp) + 0.45 * expressionScore(o.face.expression);
+    const chosen = options.reduce((a, b) => (pickScore(b) > pickScore(a) ? b : a));
+    const best = chosen.face;
+    bestFrame = chosen.frame;
+
+    // postura do corpo no frame escolhido
+    let posture: Pick["posture"];
+    try {
+      posture = await analyzer.pose(await src.grab(best.t), best.box);
+    } catch {
+      posture = undefined;
+    }
+
     // outros rostos: vem da varredura (o refinamento so olha em volta do rosto)
     const b = baseScore(best, othersOf(cand.f, framesByT.get(cand.f.t)), stats);
     const e = expressionScore(best.expression);
+    const p = posture?.score ?? 0.5;
     const W = bestFrame?.width ?? src.width, H = bestFrame?.height ?? src.height;
+    let final = 0.4 * b + 0.3 * e + 0.3 * p;
+    // foto que nao serve para arte de igreja: muito torta, curvada ou com a mao no rosto
+    if (posture?.found && (posture.score < 0.35 || posture.handOverFace)) final *= 0.6;
     refined.push({
       t: best.t,
       face: best,
       baseScore: b,
       expressionScore: e,
-      finalScore: 0.55 * b + 0.45 * e,
+      postureScore: p,
+      posture,
+      finalScore: final,
       crop: crop45(best.box, W, H),
       frameWidth: W,
       frameHeight: H,

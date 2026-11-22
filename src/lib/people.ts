@@ -6,6 +6,7 @@ import type { FaceRecord, FrameResult, Person } from "./types";
 const JOIN = 0.4;
 const MERGE = 0.4;
 const BLURRY_JOIN = 0.22;
+const SPLIT_JOIN = 0.25;
 
 interface Group {
   sum: Float32Array;
@@ -21,6 +22,7 @@ function addTo(g: Group, v: Float32Array) {
 export function groupPeople(frames: FrameResult[]): Person[] {
   const all = frames.flatMap((f) => f.faces);
   if (!all.length) return [];
+  const frameW = frames[0]?.width ?? 1, frameH = frames[0]?.height ?? 1;
 
   const sharpLimit = Math.max(8, 0.3 * median(all.map((f) => f.sharpness)));
   const sharp = all.filter((f) => f.sharpness >= sharpLimit).sort((a, b) => b.area - a.area);
@@ -73,9 +75,45 @@ export function groupPeople(frames: FrameResult[]): Person[] {
     if (best && bestSim >= BLURRY_JOIN) best.faces.push(f);
   }
 
+  // 4. mesma pessoa partida em dois grupos (ex.: de frente e de perfil):
+  //    os grupos quase nunca aparecem no mesmo frame, ficam no mesmo lugar do
+  //    quadro e ainda se parecem um pouco
+  const timesOf = (g: Group) => new Set(g.faces.map((f) => f.t));
+  const placeOf = (g: Group) => ({
+    x: median(g.faces.map((f) => (f.box.x + f.box.w / 2) / (frameW || 1))),
+    y: median(g.faces.map((f) => (f.box.y + f.box.h / 2) / (frameH || 1))),
+  });
+  let joined = true;
+  while (joined && groups.length > 1) {
+    joined = false;
+    outer: for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        const a = groups[i], b = groups[j];
+        const sim = cosine(a.centroid, b.centroid);
+        if (sim < SPLIT_JOIN) continue;
+        const ta = timesOf(a);
+        let together = 0;
+        for (const t of timesOf(b)) if (ta.has(t)) together++;
+        const small = Math.min(ta.size, b.faces.length);
+        if (together > Math.max(1, small * 0.05)) continue;
+        const pa = placeOf(a), pb = placeOf(b);
+        if (Math.hypot(pa.x - pb.x, pa.y - pb.y) > 0.22) continue;
+        a.faces.push(...b.faces);
+        for (let k = 0; k < a.sum.length; k++) a.sum[k] += b.sum[k];
+        a.centroid = normalize(a.sum);
+        groups.splice(j, 1);
+        joined = true;
+        break outer;
+      }
+    }
+  }
+
+  // 5. descarta "pessoas" que quase nao aparecem: costumam ser falsos rostos
+  //    (mao com microfone, encosto de cadeira) ou alguem passando
   const total = frames.length || 1;
+  const minMoments = Math.max(3, Math.round(total * 0.02));
   const people: Person[] = groups
-    .filter((g) => g.faces.length >= 2)
+    .filter((g) => new Set(g.faces.map((f) => f.t)).size >= minMoments)
     .map((g, i) => {
       // um rosto por momento: se a mesma pessoa aparece 2x no frame, fica o maior
       const byT = new Map<number, FaceRecord>();

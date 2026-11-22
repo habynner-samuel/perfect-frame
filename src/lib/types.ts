@@ -89,11 +89,31 @@ export interface Person {
   thumb?: string;
 }
 
+/** Postura do corpo no frame escolhido (MediaPipe PoseLandmarker). */
+export interface Posture {
+  /** encontrou ombros visiveis */
+  found: boolean;
+  /** inclinacao do tronco em relacao a vertical (graus) */
+  torsoTilt: number;
+  /** inclinacao da linha dos ombros (graus) */
+  shoulderTilt: number;
+  /** cabeca erguida: distancia do nariz acima dos ombros / largura dos ombros */
+  headLift: number;
+  /** cabeca deslocada para o lado em relacao ao centro dos ombros (em larguras de ombro) */
+  headOffset: number;
+  /** uma das maos cobrindo o rosto */
+  handOverFace: boolean;
+  /** nota de postura ereta (0 a 1) */
+  score: number;
+}
+
 export interface Pick {
   t: number;
   face: FaceRecord;
   baseScore: number;
   expressionScore: number;
+  postureScore: number;
+  posture?: Posture;
   finalScore: number;
   crop: Box;
   frameWidth: number;
@@ -110,10 +130,12 @@ export interface EngineInfo {
 export type WorkerRequest =
   | { id: number; type: "init" }
   | { id: number; type: "analyze"; t: number; bitmap: ImageBitmap; mode?: "scan" | "full"; roi?: Box }
+  | { id: number; type: "pose"; bitmap: ImageBitmap; face: Box }
   | { id: number; type: "config"; tiling: { frac?: number; maxY?: number; overlap?: number }; delegate?: "GPU" | "CPU"; thresholds?: { det: number; pres: number } };
 
 export type WorkerResponse =
   | { id: number; type: "ready"; info: EngineInfo }
   | { id: number; type: "result"; result: FrameResult }
+  | { id: number; type: "pose"; posture: Posture }
   | { id: number; type: "progress"; message: string }
   | { id: number; type: "error"; message: string };

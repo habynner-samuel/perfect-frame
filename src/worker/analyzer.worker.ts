@@ -3,10 +3,10 @@
 // nitidez, luz e pose, e gera a impressao digital de cada rosto (SFace).
 // Roda fora da thread principal para a interface nao travar.
 
-import { FaceLandmarker, FilesetResolver, type FaceLandmarkerResult } from "@mediapipe/tasks-vision";
+import { FaceLandmarker, FilesetResolver, PoseLandmarker, type FaceLandmarkerResult } from "@mediapipe/tasks-vision";
 import type * as OrtTypes from "onnxruntime-web";
 import { ARCFACE_TEMPLATE, similarityTransform, normalize, clamp01, type Pt } from "../lib/geometry";
-import type { Box, Expression, FaceRecord, FrameResult, WorkerRequest, WorkerResponse, EngineInfo } from "../lib/types";
+import type { Box, Expression, FaceRecord, FrameResult, Posture, WorkerRequest, WorkerResponse, EngineInfo } from "../lib/types";
 
 declare const self: DedicatedWorkerGlobalScope;
 declare const ort: typeof OrtTypes;
@@ -14,6 +14,7 @@ declare const ort: typeof OrtTypes;
 const MODEL_CACHE = "frame-do-pregador-modelos-v1";
 const LANDMARKER_URL = "/models/face_landmarker.task";
 const SFACE_URL = "/models/face_recognition_sface_2021dec.onnx";
+const POSE_URL = "/models/pose_landmarker_lite.task";
 const DETECT_WIDTH = 960;
 const SHARP_WIDTH = 160;
 
@@ -22,6 +23,8 @@ let sface: OrtTypes.InferenceSession | null = null;
 let sfaceInput = "data";
 let info: EngineInfo | null = null;
 let makeLandmarker: ((d: "GPU" | "CPU") => Promise<FaceLandmarker>) | null = null;
+let fileset: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>> | null = null;
+let poser: Promise<PoseLandmarker> | null = null;
 
 const post = (msg: WorkerResponse) => self.postMessage(msg);
 
@@ -83,9 +86,10 @@ async function init(id: number): Promise<EngineInfo> {
   const [lmBuf, sfBuf] = await Promise.all([loadModel(LANDMARKER_URL), loadModel(SFACE_URL)]);
 
   post({ id, type: "progress", message: "Preparando o detector de rostos" });
-  const fileset = await FilesetResolver.forVisionTasks("/vendor/mediapipe");
+  fileset = await FilesetResolver.forVisionTasks("/vendor/mediapipe");
+  const fs = fileset;
   const make = (makeLandmarker = (delegate: "GPU" | "CPU") =>
-    FaceLandmarker.createFromOptions(fileset, {
+    FaceLandmarker.createFromOptions(fs, {
       baseOptions: { modelAssetBuffer: new Uint8Array(lmBuf), delegate },
       runningMode: "IMAGE",
       numFaces: 5,
@@ -473,6 +477,110 @@ async function analyze(t: number, bitmap: ImageBitmap, mode: "scan" | "full", ro
   return { t, width: W, height: H, faces, ms };
 }
 
+// ---------------------------------------------------------------------------
+// Postura do corpo. So roda nos frames finais (dezenas por video), entao usa
+// a CPU e e carregado na primeira vez que precisa.
+
+function getPoser(): Promise<PoseLandmarker> {
+  if (!poser) {
+    poser = (async () => {
+      const buf = await loadModel(POSE_URL);
+      return PoseLandmarker.createFromOptions(fileset!, {
+        baseOptions: { modelAssetBuffer: new Uint8Array(buf), delegate: "CPU" },
+        runningMode: "IMAGE",
+        numPoses: 2,
+        minPoseDetectionConfidence: 0.4,
+        minPosePresenceConfidence: 0.4,
+      });
+    })().catch((e) => {
+      poser = null;
+      throw e;
+    });
+  }
+  return poser;
+}
+
+const POSE_PX = 384;
+const poseCanvas = new OffscreenCanvas(POSE_PX, POSE_PX);
+const poseCtx = poseCanvas.getContext("2d")!;
+const deg = (r: number) => (r * 180) / Math.PI;
+const ramp = (v: number, good: number, bad: number) =>
+  good < bad ? clamp01(1 - (v - good) / (bad - good)) : clamp01((v - bad) / (good - bad));
+
+/**
+ * Mede se a pessoa esta ereta: tronco na vertical, ombros nivelados, cabeca
+ * erguida e centrada sobre os ombros, sem mao na frente do rosto.
+ */
+async function measurePosture(bitmap: ImageBitmap, face: Box): Promise<Posture> {
+  const W = bitmap.width, H = bitmap.height;
+  // recorte do corpo: um pouco acima da cabeca ate a cintura
+  const fh = face.h;
+  const cw = Math.min(W, fh * 7);
+  const ch = Math.min(H, fh * 8);
+  const cx = Math.max(0, Math.min(W - cw, face.x + face.w / 2 - cw / 2));
+  const cy = Math.max(0, Math.min(H - ch, face.y - fh * 1.2));
+  const k = POSE_PX / Math.max(cw, ch);
+  const dw = Math.round(cw * k), dh = Math.round(ch * k);
+  poseCanvas.width = dw;
+  poseCanvas.height = dh;
+  poseCtx.drawImage(bitmap, cx, cy, cw, ch, 0, 0, dw, dh);
+
+  const none: Posture = { found: false, torsoTilt: 0, shoulderTilt: 0, headLift: 0, headOffset: 0, handOverFace: false, score: 0.5 };
+  const res = (await getPoser()).detect(poseCanvas);
+  if (!res.landmarks.length) return none;
+
+  // varias pessoas no recorte: fica com a que tem o nariz mais perto do rosto
+  const fcx = face.x + face.w / 2, fcy = face.y + face.h / 2;
+  const toFull = (p: { x: number; y: number }) => ({ x: cx + p.x * cw, y: cy + p.y * ch });
+  let best = res.landmarks[0], bestD = Infinity;
+  for (const lm of res.landmarks) {
+    const n = toFull(lm[0]);
+    const d = Math.hypot(n.x - fcx, n.y - fcy);
+    if (d < bestD) { bestD = d; best = lm; }
+  }
+  if (bestD > face.h * 1.5) return none;
+
+  const P = (i: number) => ({ ...toFull(best[i]), v: best[i].visibility ?? 1 });
+  const nose = P(0), ls = P(11), rs = P(12), lh = P(23), rh = P(24), lw = P(15), rw = P(16);
+  if (ls.v < 0.5 || rs.v < 0.5) return none;
+
+  const sw = Math.hypot(ls.x - rs.x, ls.y - rs.y) || 1;
+  const midS = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 };
+  let shoulderTilt = Math.abs(deg(Math.atan2(ls.y - rs.y, ls.x - rs.x)));
+  if (shoulderTilt > 90) shoulderTilt = 180 - shoulderTilt;
+
+  // tronco: com quadril visivel, linha ombros -> quadril; sem quadril (pulpito
+  // na frente), usa o deslocamento da cabeca sobre os ombros
+  let torsoTilt = 0;
+  if (lh.v > 0.5 && rh.v > 0.5) {
+    const midH = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 };
+    torsoTilt = Math.abs(deg(Math.atan2(midH.x - midS.x, midH.y - midS.y)));
+  }
+  const headOffset = Math.abs(nose.x - midS.x) / sw;
+  const headLift = (midS.y - nose.y) / sw;
+
+  const fx0 = face.x - face.w * 0.1, fx1 = face.x + face.w * 1.1;
+  const fy0 = face.y, fy1 = face.y + face.h * 0.7;
+  const covers = (w: { x: number; y: number; v: number }) => w.v > 0.5 && w.x > fx0 && w.x < fx1 && w.y > fy0 && w.y < fy1;
+  const handOverFace = covers(lw) || covers(rw);
+
+  const score =
+    0.3 * ramp(torsoTilt, 8, 30) +
+    0.25 * ramp(shoulderTilt, 5, 20) +
+    0.25 * ramp(headOffset, 0.2, 0.7) +
+    0.2 * ramp(headLift, 0.55, 0.25);
+
+  return {
+    found: true,
+    torsoTilt,
+    shoulderTilt,
+    headLift,
+    headOffset,
+    handOverFace,
+    score: handOverFace ? score * 0.4 : score,
+  };
+}
+
 self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
   const msg = e.data;
   try {
@@ -492,6 +600,12 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
         landmarker = await makeLandmarker(msg.delegate);
       }
       post({ id: msg.id, type: "ready", info: info! });
+    } else if (msg.type === "pose") {
+      try {
+        post({ id: msg.id, type: "pose", posture: await measurePosture(msg.bitmap, msg.face) });
+      } finally {
+        msg.bitmap.close();
+      }
     } else if (msg.type === "analyze") {
       try {
         const result = await analyze(msg.t, msg.bitmap, msg.mode ?? "scan", msg.roi);

@@ -19,7 +19,7 @@ npm run build      # gera o site estático em out/
 - `src/lib/scoring.ts`: notas de cada frame, nota de expressão e recorte 4:5.
 - `src/lib/pipeline.ts`: varredura, refinamento nos frames vizinhos e exportação PNG/zip.
 - `src/lib/storage.ts`: progresso salvo no IndexedDB (só números, nunca imagens).
-- `public/models/`: `face_landmarker.task` (float16) e `face_recognition_sface_2021dec.onnx`.
+- `public/models/`: `face_landmarker.task` (float16), `face_recognition_sface_2021dec.onnx` e `pose_landmarker_lite.task` (postura do corpo nas fotos finais).
 
 ## Decisões técnicas
 

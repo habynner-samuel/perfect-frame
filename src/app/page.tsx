@@ -81,7 +81,11 @@ export default function Page() {
     return run;
   }, []);
 
+  /** tempos das fotos ja mostradas por pessoa, para "buscar outras" nao repetir */
+  const shownRef = useRef(new Map<number, number[]>());
+
   const reset = useCallback(() => {
+    shownRef.current.clear();
     scanAbort.current?.abort();
     selAbort.current?.abort();
     srcRef.current?.dispose();
@@ -96,9 +100,11 @@ export default function Page() {
   }, [refreshRecents]);
 
   const choosePerson = useCallback(
-    async (index: number, list: Person[]) => {
+    async (index: number, list: Person[], more = false) => {
       const src = srcRef.current, scan = scanRef.current;
       if (!src || !scan || !list[index]) return;
+      const exclude = more ? shownRef.current.get(index) ?? [] : [];
+      setNotice(null);
       selAbort.current?.abort();
       const ctrl = new AbortController();
       selAbort.current = ctrl;
@@ -109,18 +115,27 @@ export default function Page() {
       try {
         const result = await withVideo(async () => {
           if (ctrl.signal.aborted) throw new DOMException("cancelado", "AbortError");
+          const label = more ? "Procurando outras fotos" : "Escolhendo as melhores fotos";
           const res = await selectBest(
             src, client, scan, list[index], settings.count, settings.minGap, fpsRef.current,
-            (p) => !ctrl.signal.aborted && setSelecting({ ...p, label: "Escolhendo as melhores fotos" }),
-            ctrl.signal
+            (p) => !ctrl.signal.aborted && setSelecting({ ...p, label }),
+            ctrl.signal,
+            exclude
           );
           if (!ctrl.signal.aborted) setSelecting({ done: res.length, total: res.length, label: "Preparando as imagens" });
           await makePreviews(src, res);
           return res;
         });
         if (!ctrl.signal.aborted) {
+          shownRef.current.set(index, [...exclude, ...result.map((p) => p.t)]);
           setPicks(result);
           setSelecting(null);
+          if (more && !result.length) {
+            setNotice({
+              kind: "info",
+              text: "Não sobraram fotos diferentes dessa pessoa. Diminua a distância mínima ou refaça a seleção para ver as melhores de novo.",
+            });
+          }
         }
       } catch (e) {
         if ((e as DOMException)?.name === "AbortError") return;
@@ -338,10 +353,14 @@ export default function Page() {
           </InspectorSection>
         )}
         <SettingsPanel settings={settings} onSettings={setSettings} showInterval={false} />
+        <Button className="w-full" disabled={!!selecting || !picks.length} onClick={() => choosePerson(selected, people, true)}>
+          Buscar outras fotos
+        </Button>
+        <p className="px-2 text-[12px] leading-[1.33] text-ink-2">Procura de novo no mesmo vídeo, sem repetir as fotos que já apareceram.</p>
         <Button variant="outline" className="w-full" disabled={!!selecting} onClick={() => choosePerson(selected, people)}>
           Refazer seleção
         </Button>
-        <p className="px-2 text-[12px] leading-[1.33] text-ink-2">Usa a quantidade e a distância acima, sem analisar o vídeo de novo.</p>
+        <p className="px-2 text-[12px] leading-[1.33] text-ink-2">Volta para as melhores fotos, usando a quantidade e a distância acima.</p>
       </>
     );
 
