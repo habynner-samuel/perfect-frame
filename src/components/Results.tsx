@@ -1,9 +1,8 @@
 "use client";
 import type { Person, Pick } from "@/lib/types";
 import { clockLabel } from "@/lib/pipeline";
-import { SectionLabel } from "./ui";
 import { WorkHeader } from "./Shell";
-import { Button, Icon } from "./ui";
+import { Button, Card, Icon, SectionTitle } from "./ui";
 
 /** Etapa 3: escolher a pessoa e baixar as fotos. */
 export function ResultsView({
@@ -33,21 +32,18 @@ export function ResultsView({
     <>
       <WorkHeader
         step={2}
-        title="Pessoa e fotos"
+        title="Suas fotos."
         subtitle={fileName}
         actions={
           <Button onClick={onZip} disabled={!!selecting || !picks.length || !!busy}>
-            <Icon name="zip" /> {busy === "zip" ? "Montando o zip" : "Baixar todas (.zip)"}
+            {busy === "zip" ? "Montando o zip..." : "Baixar todas"}
           </Button>
         }
       />
 
-      <div className="px-6 py-6 lg:px-8">
-        <div className="flex items-baseline justify-between gap-4">
-          <SectionLabel>Pessoas encontradas</SectionLabel>
-          <span className="text-[13px] text-faint">Clique em outra pessoa se o pregador não for o marcado.</span>
-        </div>
-        <div className="mt-3 flex gap-3 overflow-x-auto pb-1" role="radiogroup" aria-label="Pessoas encontradas">
+      <div className="mt-10">
+        <SectionTitle title="Pessoas encontradas." tail="O provável pregador já vem marcado." />
+        <div className="-mx-1 mt-5 flex gap-4 overflow-x-auto px-1 pb-4" role="radiogroup" aria-label="Pessoas encontradas">
           {people.map((p, i) => {
             const on = i === selected;
             return (
@@ -56,83 +52,79 @@ export function ResultsView({
                 role="radio"
                 aria-checked={on}
                 onClick={() => onSelect(i)}
-                className={`w-[132px] shrink-0 cursor-pointer overflow-hidden rounded-[4px] border bg-panel text-left transition-colors duration-150 ${
-                  on ? "border-cyan" : "border-line hover:border-line-strong"
+                className={`w-[180px] shrink-0 cursor-pointer overflow-hidden rounded-[18px] bg-surface text-left shadow-[var(--shadow-card)] outline-offset-0 transition-shadow duration-300 hover:shadow-[var(--shadow-card-hover)] ${
+                  on ? "outline-2 outline-blue" : ""
                 }`}
               >
-                <div className="relative aspect-square bg-navy">
+                <div className="aspect-square bg-fill">
                   {p.thumb && <img src={p.thumb} alt={`Pessoa ${i + 1}`} className="h-full w-full object-cover" />}
-                  {on && (
-                    <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center bg-cyan text-abyss">
-                      <Icon name="check" className="h-3.5 w-3.5" />
-                    </span>
-                  )}
                 </div>
-                <div className="px-2.5 py-2">
-                  <p className="truncate text-[13px] font-medium">{i === 0 ? "Provável pregador" : `Pessoa ${i + 1}`}</p>
-                  <p className="text-[12px] text-faint">{Math.max(1, Math.round(p.percent))}% do vídeo</p>
+                <div className="px-4 pb-4 pt-3">
+                  {i === 0 && <p className="text-[12px] font-semibold text-[#bf4800]">Provável pregador</p>}
+                  <p className="text-[17px] font-semibold">Pessoa {i + 1}</p>
+                  <p className="text-[14px] text-ink-2">Em {Math.max(1, Math.round(p.percent))}% do vídeo</p>
                 </div>
               </button>
             );
           })}
         </div>
 
-        <div className="mt-8 flex items-baseline justify-between gap-4">
-          <SectionLabel>Melhores frames</SectionLabel>
-          {!!picks.length && <span className="text-[13px] text-faint">{picks.length} fotos, da melhor para a pior</span>}
-        </div>
+        <div className="mt-10">
+          <SectionTitle title="Melhores frames." tail={picks.length ? `${picks.length} fotos, da melhor para a pior.` : undefined} />
 
-        {selecting && (
-          <div className="mt-3 rounded-[4px] border border-line p-5">
-            <div className="flex items-center justify-between text-[14px]">
-              <span>{selecting.label}</span>
-              <span className="tabular-nums text-mist">
-                {selecting.done} de {selecting.total}
-              </span>
-            </div>
-            <div className="mt-3 h-1 bg-line-strong">
-              <div className="h-full bg-cyan transition-[width] duration-300" style={{ width: `${selecting.total ? (selecting.done / selecting.total) * 100 : 3}%` }} />
-            </div>
-            <p className="mt-3 text-[13px] text-faint">Olhando os frames vizinhos de cada candidata para fugir do borrão de movimento.</p>
-          </div>
-        )}
-
-        {!selecting && !picks.length && (
-          <p className="mt-3 text-[14px] text-mist">Não achamos fotos boas dessa pessoa. Tente outra pessoa ou um intervalo de análise menor.</p>
-        )}
-
-        <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
-          {picks.map((p, i) => (
-            <article key={`${p.t}-${i}`} className="group overflow-hidden rounded-[4px] border border-line bg-panel">
-              <div className="relative bg-navy" style={{ aspectRatio: `${p.frameWidth} / ${p.frameHeight}` }}>
-                {p.preview && <img src={p.preview} alt={`Frame em ${clockLabel(p.t)}`} className="h-full w-full object-cover" />}
-                <div
-                  className="pointer-events-none absolute border border-dashed border-white/60 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-                  style={{
-                    left: `${(p.crop.x / p.frameWidth) * 100}%`,
-                    top: `${(p.crop.y / p.frameHeight) * 100}%`,
-                    width: `${(p.crop.w / p.frameWidth) * 100}%`,
-                    height: `${(p.crop.h / p.frameHeight) * 100}%`,
-                  }}
-                />
-                <span className="absolute left-2 top-2 bg-abyss/80 px-1.5 py-0.5 text-[12px] font-medium tabular-nums">#{i + 1}</span>
-              </div>
-              <div className="flex items-center justify-between px-3 pt-2.5 text-[13px]">
-                <span className="tabular-nums text-white">{clockLabel(p.t)}</span>
-                <span className="text-faint">
-                  Nota <span className="tabular-nums text-cyan">{Math.round(p.finalScore * 100)}</span>
+          {selecting && (
+            <Card className="mt-5 p-6">
+              <div className="flex items-center justify-between text-[17px]">
+                <span className="font-semibold">{selecting.label}</span>
+                <span className="tabular-nums text-ink-2">
+                  {selecting.done} de {selecting.total}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2 p-3">
-                <Button variant="outline" size="sm" onClick={() => onFull(p)} disabled={!!busy}>
-                  <Icon name="download" className="h-3.5 w-3.5" /> Inteiro
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => onCrop(p)} disabled={!!busy}>
-                  <Icon name="download" className="h-3.5 w-3.5" /> Recorte 4:5
-                </Button>
+              <div className="mt-4 h-1 overflow-hidden rounded-full bg-fill">
+                <div className="h-full rounded-full bg-blue transition-[width] duration-300" style={{ width: `${selecting.total ? (selecting.done / selecting.total) * 100 : 3}%` }} />
               </div>
-            </article>
-          ))}
+              <p className="mt-3 text-[14px] text-ink-2">Olhando os quadros vizinhos de cada foto para fugir do borrão de movimento.</p>
+            </Card>
+          )}
+
+          {!selecting && !picks.length && (
+            <p className="mt-5 text-[17px] text-ink-2">Não achamos fotos boas dessa pessoa. Tente outra pessoa ou um intervalo de análise menor.</p>
+          )}
+
+          <div className="mt-5 grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
+            {picks.map((p, i) => (
+              <article key={`${p.t}-${i}`} className="group overflow-hidden rounded-[18px] bg-surface shadow-[var(--shadow-card)]">
+                <div className="relative bg-ink" style={{ aspectRatio: `${p.frameWidth} / ${p.frameHeight}` }}>
+                  {p.preview && <img src={p.preview} alt={`Frame em ${clockLabel(p.t)}`} className="h-full w-full object-cover" />}
+                  <div
+                    className="pointer-events-none absolute rounded-[4px] border border-white/80 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                    style={{
+                      left: `${(p.crop.x / p.frameWidth) * 100}%`,
+                      top: `${(p.crop.y / p.frameHeight) * 100}%`,
+                      width: `${(p.crop.w / p.frameWidth) * 100}%`,
+                      height: `${(p.crop.h / p.frameHeight) * 100}%`,
+                    }}
+                  />
+                </div>
+                <div className="px-5 pb-5 pt-4">
+                  <div className="flex items-baseline justify-between">
+                    <p className="text-[17px] font-semibold tabular-nums">{clockLabel(p.t)}</p>
+                    <p className="text-[14px] text-ink-2">
+                      Nota <span className="tabular-nums text-ink">{Math.round(p.finalScore * 100)}</span>
+                    </p>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[14px]">
+                    <button onClick={() => onFull(p)} disabled={!!busy} className="inline-flex cursor-pointer items-center gap-1 text-link hover:underline disabled:opacity-40">
+                      Baixar inteiro <Icon name="download" className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => onCrop(p)} disabled={!!busy} className="inline-flex cursor-pointer items-center gap-1 text-link hover:underline disabled:opacity-40">
+                      Baixar recorte 4:5 <Icon name="download" className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       </div>
     </>

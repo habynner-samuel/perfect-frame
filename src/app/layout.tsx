@@ -1,14 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Barlow, Barlow_Condensed } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const condensed = Barlow_Condensed({
-  subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
-  variable: "--font-barlow-condensed",
-  display: "swap",
-});
-const barlow = Barlow({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-barlow", display: "swap" });
+// No Mac e no iPhone o texto usa a fonte do sistema (SF Pro, a mesma da Apple).
+// No Windows, a Inter entra no lugar, por ser a mais parecida.
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Frame do Pregador",
@@ -17,11 +13,11 @@ export const metadata: Metadata = {
   icons: { icon: "/icon.svg" },
 };
 
-export const viewport: Viewport = { themeColor: "#020a18" };
+export const viewport: Viewport = { themeColor: "#f5f5f7" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${condensed.variable} ${barlow.variable}`}>
+    <html lang="pt-BR" className={inter.variable}>
       <body>{children}</body>
     </html>
   );

@@ -4,7 +4,7 @@ import JSZip from "jszip";
 import { ImportView, SettingsPanel, type ImportHandle } from "@/components/Home";
 import { ResultsView } from "@/components/Results";
 import { InspectorSection, Shell, WorkHeader } from "@/components/Shell";
-import { Button, Icon } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { getAnalyzer } from "@/lib/analyzer-client";
 import { groupPeople } from "@/lib/people";
 import {
@@ -307,87 +307,67 @@ export default function Page() {
 
   const inspector =
     phase === "inicio" ? (
-      <>
-        <SettingsPanel settings={settings} onSettings={setSettings} />
-        <InspectorSection title="Como funciona">
-          <ol className="space-y-3 text-[14px] text-mist">
-            {[
-              "O site olha o vídeo inteiro e encontra os rostos.",
-              "Separa as pessoas e marca quem mais aparece em destaque.",
-              "Escolhe as fotos mais nítidas, de frente e de olhos abertos.",
-            ].map((t, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="tabular-nums text-cyan">{i + 1}</span>
-                <span>{t}</span>
-              </li>
-            ))}
-          </ol>
-        </InspectorSection>
-      </>
+      <SettingsPanel settings={settings} onSettings={setSettings} />
     ) : phase === "varredura" ? (
       <>
         <InspectorSection title="Progresso">
-          <p className="font-display text-[56px] font-bold leading-none tabular-nums">{Math.floor(pct)}%</p>
-          <dl className="space-y-2 text-[14px]">
+          <p className="headline text-[56px] tabular-nums">{Math.floor(pct)}%</p>
+          <dl className="divide-y divide-hairline/70 text-[14px]">
             <Row label="Minutos analisados" value={`${Math.floor((progress?.videoSeconds ?? 0) / 60)} de ${Math.ceil(durMin)}`} />
             <Row label="Tempo restante" value={progress?.etaSeconds != null ? etaLabel(progress.etaSeconds).replace("cerca de ", "") : "calculando"} />
             <Row label="Rostos encontrados" value={`${progress?.facesFound ?? 0}`} />
             <Row label="Processamento" value={engine ? (engine.landmarker === "GPU" ? "Placa de vídeo" : "Processador") : "..."} />
           </dl>
-        </InspectorSection>
-        <section className="p-5">
           <Button variant="outline" className="w-full" onClick={cancelScan}>
-            <Icon name="close" /> Pausar análise
+            Pausar análise
           </Button>
-          <p className="mt-3 text-[12px] text-faint">O progresso é salvo sozinho. Escolha o mesmo vídeo depois para continuar.</p>
-        </section>
+          <p className="-mt-2 text-[12px] leading-[1.33] text-ink-2">O progresso é salvo sozinho. Escolha o mesmo vídeo depois para continuar.</p>
+        </InspectorSection>
       </>
     ) : (
       <>
         {selectedPerson && (
           <InspectorSection title="Pessoa selecionada">
-            <div className="flex items-center gap-3">
-              {selectedPerson.thumb && <img src={selectedPerson.thumb} alt="" className="h-14 w-14 object-cover" />}
+            <div className="flex items-center gap-4">
+              {selectedPerson.thumb && <img src={selectedPerson.thumb} alt="" className="h-16 w-16 rounded-[12px] object-cover" />}
               <div>
-                <p className="text-[15px] font-medium">{selected === 0 ? "Provável pregador" : `Pessoa ${selected + 1}`}</p>
-                <p className="text-[13px] text-faint">Aparece em {Math.max(1, Math.round(selectedPerson.percent))}% do vídeo</p>
+                <p className="text-[17px] font-semibold">{selected === 0 ? "Provável pregador" : `Pessoa ${selected + 1}`}</p>
+                <p className="text-[14px] text-ink-2">Em {Math.max(1, Math.round(selectedPerson.percent))}% do vídeo</p>
               </div>
             </div>
           </InspectorSection>
         )}
         <SettingsPanel settings={settings} onSettings={setSettings} showInterval={false} />
-        <section className="border-b border-line p-5">
-          <Button variant="outline" className="w-full" disabled={!!selecting} onClick={() => choosePerson(selected, people)}>
-            <Icon name="refresh" /> Refazer seleção
-          </Button>
-          <p className="mt-3 text-[12px] text-faint">Usa a quantidade e a distância acima, sem analisar o vídeo de novo.</p>
-        </section>
+        <Button variant="outline" className="w-full" disabled={!!selecting} onClick={() => choosePerson(selected, people)}>
+          Refazer seleção
+        </Button>
+        <p className="px-2 text-[12px] leading-[1.33] text-ink-2">Usa a quantidade e a distância acima, sem analisar o vídeo de novo.</p>
       </>
     );
 
   return (
     <>
-      <Shell inspector={inspector} recents={recents} onRecent={onRecent} onHome={reset}>
+      <Shell inspector={inspector} recents={recents} onRecent={onRecent} onHome={reset} showRecents={phase === "inicio"}>
         {phase === "inicio" && <ImportView ref={importRef} onFile={onFile} notice={notice} />}
 
         {/* ANALISE: fica montada para o canvas da previa existir durante a varredura */}
         <div className={phase === "varredura" ? "" : "hidden"}>
-          <WorkHeader step={1} title="Analisando o vídeo" subtitle={fileName} />
-          <div className="px-6 py-6 lg:px-8">
-            <div className="grid aspect-video w-full max-w-[960px] place-items-center overflow-hidden rounded-[4px] border border-line bg-navy">
-              <canvas ref={previewRef} className="max-h-full max-w-full" aria-label="Frame sendo analisado" />
+          <WorkHeader step={1} title="Analisando." subtitle={fileName} />
+          <div className="mt-10">
+            <div className="grid aspect-video w-full place-items-center overflow-hidden rounded-[18px] bg-ink shadow-[var(--shadow-card)]">
+              <canvas ref={previewRef} className="max-h-full max-w-full" aria-label="Quadro sendo analisado" />
             </div>
-            <div className="mt-4 h-1 max-w-[960px] bg-line-strong">
-              <div className="h-full bg-cyan transition-[width] duration-300" style={{ width: `${Math.max(1, pct)}%` }} />
+            <div className="mt-5 h-1 overflow-hidden rounded-full bg-fill">
+              <div className="h-full rounded-full bg-blue transition-[width] duration-300" style={{ width: `${Math.max(1, pct)}%` }} />
             </div>
-            <p className="mt-3 text-[14px] text-mist" aria-live="polite">{status}</p>
+            <p className="mt-3 text-[14px] text-ink-2" aria-live="polite">{status}</p>
           </div>
         </div>
 
         {phase === "resultado" && (
           <>
             {notice && (
-              <div role="alert" className="mx-6 mt-5 border-l-2 border-danger bg-danger/10 px-4 py-3 text-[14px] lg:mx-8">{notice.text}</div>
+              <div role="alert" className="mt-6 rounded-[12px] bg-[#fff0f0] px-5 py-4 text-[14px] text-red">{notice.text}</div>
             )}
             <ResultsView
               fileName={fileName}
@@ -409,20 +389,22 @@ export default function Page() {
           o quadro anterior logo depois de um seek. */}
       <video ref={videoRef} className="hidden" muted playsInline aria-hidden />
 
-      {/* RETOMAR */}
+      {/* RETOMAR: dialogo no estilo de alerta do macOS */}
       {resume && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-abyss/85 p-4" role="dialog" aria-modal="true" aria-labelledby="retomar-titulo">
-          <div className="w-full max-w-[460px] rounded-[4px] border border-line-strong bg-navy p-6">
-            <h2 id="retomar-titulo" className="text-[18px] font-semibold">
-              {resume.saved.done ? "Esse vídeo já foi analisado" : "Continuar a análise?"}
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="retomar-titulo">
+          <div className="rise w-full max-w-[420px] rounded-[18px] bg-surface p-7 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+            <h2 id="retomar-titulo" className="headline text-[24px]">
+              {resume.saved.done ? "Esse vídeo já foi analisado." : "Continuar a análise?"}
             </h2>
-            <p className="mt-2 text-[14px] text-mist">
+            <p className="mt-2 text-[17px] text-ink-2">
               {resume.saved.done
                 ? "Dá para abrir o resultado salvo na hora, ou analisar tudo de novo."
-                : `A análise desse vídeo parou em ${Math.floor((resume.saved.nextIndex / resume.saved.totalFrames) * 100)}%. Dá para continuar de onde parou.`}
+                : `A análise parou em ${Math.floor((resume.saved.nextIndex / resume.saved.totalFrames) * 100)}%. Dá para continuar de onde parou.`}
             </p>
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <Button variant="quiet" onClick={() => setResume(null)}>Voltar</Button>
+            <div className="mt-7 flex flex-col gap-2">
+              <Button onClick={() => startScan(resume.file, resume.saved)}>
+                {resume.saved.done ? "Abrir resultado" : "Continuar"}
+              </Button>
               <Button
                 variant="outline"
                 onClick={async () => {
@@ -433,9 +415,7 @@ export default function Page() {
               >
                 Começar do zero
               </Button>
-              <Button onClick={() => startScan(resume.file, resume.saved)}>
-                {resume.saved.done ? "Abrir resultado" : "Continuar"}
-              </Button>
+              <Button variant="quiet" onClick={() => setResume(null)}>Cancelar</Button>
             </div>
           </div>
         </div>
@@ -446,9 +426,9 @@ export default function Page() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
-      <dt className="text-mist">{label}</dt>
-      <dd className="tabular-nums text-white">{value}</dd>
+    <div className="flex items-baseline justify-between gap-4 py-2.5">
+      <dt className="text-ink-2">{label}</dt>
+      <dd className="tabular-nums text-ink">{value}</dd>
     </div>
   );
 }

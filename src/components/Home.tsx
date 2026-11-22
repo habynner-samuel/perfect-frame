@@ -2,7 +2,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import type { ScanSettings } from "@/lib/types";
 import { InspectorSection, WorkHeader } from "./Shell";
-import { Button, Icon, Segmented, Slider } from "./ui";
+import { Button, Card, Icon, Segmented, SectionTitle, Slider } from "./ui";
 
 export interface ImportHandle {
   openPicker: () => void;
@@ -24,43 +24,35 @@ export const ImportView = forwardRef<ImportHandle, {
 
   return (
     <>
-      <WorkHeader
-        step={0}
-        title="Melhores frames"
-        subtitle="Encontra o pregador no vídeo do culto e separa os frames com a melhor pose, prontos para a arte."
-      />
-      <div className="px-6 py-6 lg:px-8">
+      <WorkHeader step={0} title="Melhores frames." subtitle="O pregador na melhor pose. Direto do vídeo do culto." />
+
+      <div className="mt-10">
         {notice && (
           <div
             role={notice.kind === "error" ? "alert" : "status"}
-            className={`mb-5 border-l-2 px-4 py-3 text-[14px] ${notice.kind === "error" ? "border-danger bg-danger/10" : "border-cyan bg-cyan/10"}`}
+            className={`mb-6 rounded-[12px] px-5 py-4 text-[14px] ${notice.kind === "error" ? "bg-[#fff0f0] text-red" : "bg-[#e8f2fd] text-ink"}`}
           >
             {notice.text}
           </div>
         )}
 
-        <div
-          onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-          onDragLeave={() => setOver(false)}
-          onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files); }}
-          className={`flex min-h-[300px] flex-col justify-between rounded-[4px] border border-dashed p-6 transition-colors duration-150 sm:p-8 ${
-            over ? "border-cyan bg-cyan/5" : "border-line-strong bg-panel"
-          }`}
-        >
-          <div className="flex items-start gap-4">
-            <span className="grid h-11 w-11 shrink-0 place-items-center border border-line-strong text-white">
-              <Icon name="upload" className="h-5 w-5" />
-            </span>
-            <div>
-              <h2 className="text-[20px] font-semibold leading-tight">Arraste o vídeo da pregação para cá</h2>
-              <p className="mt-1 text-[15px] text-mist">MP4, MOV ou WebM. Pode ser o culto inteiro.</p>
+        <SectionTitle title="Escolha o vídeo." tail="Pode ser o culto inteiro." />
+
+        <Card className="mt-5 overflow-hidden">
+          <div
+            onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files); }}
+            className={`m-3 flex min-h-[320px] flex-col items-start justify-end rounded-[12px] border-2 border-dashed p-8 transition-colors duration-200 ${
+              over ? "border-blue bg-[#e8f2fd]" : "border-hairline"
+            }`}
+          >
+            <Icon name="upload" className="h-10 w-10 text-ink-2" />
+            <p className="headline mt-6 text-[32px]">Arraste o arquivo para cá.</p>
+            <p className="mt-2 text-[17px] text-ink-2">MP4, MOV ou WebM. O vídeo é lido aqui mesmo, sem upload.</p>
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+              <Button onClick={open}>Escolher arquivo</Button>
             </div>
-          </div>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Button onClick={open}>
-              <Icon name="upload" /> Escolher arquivo
-            </Button>
-            <span className="text-[13px] text-faint">O arquivo é lido aqui mesmo, sem upload.</span>
           </div>
           <input
             ref={input}
@@ -69,33 +61,28 @@ export const ImportView = forwardRef<ImportHandle, {
             className="hidden"
             onChange={(e) => { pick(e.target.files); e.target.value = ""; }}
           />
-        </div>
+        </Card>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-2">
-          <Tip title="Só tem o link do YouTube?">
-            Se a pregação está no canal da igreja, abra o YouTube Studio, vá em Conteúdo, clique nos três pontos do
-            vídeo e escolha Baixar. Ou peça o arquivo à equipe de mídia: ele vem com a melhor qualidade.
-          </Tip>
-          <Tip title="O que você recebe">
-            As pessoas que aparecem no vídeo, com o provável pregador já marcado, e as melhores fotos dele em PNG,
-            inteiras e no recorte vertical 4:5.
-          </Tip>
+        <div className="mt-12">
+          <SectionTitle title="Como funciona." tail="Três passos, sem complicação." />
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            {[
+              ["frame", "Encontra os rostos.", "O site olha o vídeo inteiro, quadro a quadro, e acha todas as pessoas."],
+              ["check", "Marca o pregador.", "Quem mais aparece em destaque no vídeo já vem selecionado."],
+              ["download", "Separa as melhores.", "Fotos nítidas, de frente e de olhos abertos. Em PNG e no recorte 4:5."],
+            ].map(([icon, t, d]) => (
+              <Card key={t} className="p-7">
+                <Icon name={icon as "frame"} className="h-7 w-7 text-blue" />
+                <p className="mt-8 text-[21px] font-semibold leading-tight tracking-[-0.01em]">{t}</p>
+                <p className="mt-2 text-[17px] text-ink-2">{d}</p>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     </>
   );
 });
-
-function Tip({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-[4px] border border-line p-5">
-      <p className="flex items-center gap-2 text-[14px] font-semibold">
-        <Icon name="info" className="h-4 w-4 text-cyan" /> {title}
-      </p>
-      <p className="mt-2 text-[14px] leading-relaxed text-mist">{children}</p>
-    </div>
-  );
-}
 
 const INTERVALS = [0.5, 1, 2, 3];
 
@@ -114,13 +101,13 @@ export function SettingsPanel({
       {showInterval && (
         <InspectorSection title="Análise">
           <Segmented
-            label="Olhar um frame a cada"
+            label="Olhar um quadro a cada"
             options={INTERVALS}
             value={settings.interval}
             onChange={(interval) => onSettings({ ...settings, interval })}
             format={(v) => `${String(v).replace(".", ",")} s`}
           />
-          <p className="-mt-2 text-[12px] text-faint">Menor fica mais preciso e demora mais.</p>
+          <p className="-mt-2 text-[12px] leading-[1.33] text-ink-2">Menor fica mais preciso e demora mais.</p>
         </InspectorSection>
       )}
       <InspectorSection title="Fotos">
